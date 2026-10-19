@@ -26,7 +26,55 @@ from tests/CI. `scripts/check-no-rsi.sh` fails the build if
 
 ---
 
-## Current state (2026-10-19, this increment)
+## Current state (2026-10-19, OSM / eye / critique)
+
+Feature branch **`cursor/kjfk-osm-eye-6852`** (base `cursor/s376-visual-v1-6852`).
+Do not wait on Mint. Public data lives in **`/tmp/kjfk-real`** (never commit).
+3DEP/NYS `s376-cache fetch` is still paging lod0 (leave that PID alone).
+
+### What shipped this increment
+
+1. **OSM metro bake no longer evicts Manhattan.** Working set
+   `kMaxOsmBuildingsBake=80000`, rank in 4k batches, then `write_osm_bin`
+   keeps 12 k. Rebaked from local Overpass tiles (reuse, no network):
+   **12 000 buildings, max 472 m (Central Park Tower), 5 586 ≥ 40 m,
+   Empire State 443.2 m.** osm.bin is **v3** (type survives).
+2. **`shoreline.bin`** from OSM `natural=water` (64 rings). Loaded
+   **before** globe/tiles. 04R short-final stays water even when the
+   open inlet is not a closed OSM pond. Rockaway is the thin corridor.
+3. **KJFK terminals T1/T4/T5/T7/T8, hangars, ATCT** from OSM (T4 462-pt
+   / 29.7 m, T5 131-pt / 13.6 m Saarinen, T1 134-pt). Light NYS-style
+   roofs. Jetbridge query added (`aeroway=jet_bridge`). Night: roof
+   floods on Airport buildings + stronger facade windows.
+4. **737-300 eye + 4-channel 50°×32.5° strip** already on this branch
+   (`--channel strip`, `--at KJFK:04R:6`).
+5. **Day ALS** stays aviation-white, noon intensity **0.18** (PAR-56
+   bar, not a cyan bay wash). Night 0.6 nm ALSF-2 + PAPI read.
+6. **Three critique rounds** of `--at` day/dusk/night/wet vs public
+   refs (viewed, not committed). Worst 10 each round; remaining:
+   globe-hex water at 0.6 nm (lod0 1 m still paging), tan far-field
+   until NYS tiles land, terminals still shy at 3 nm, Manhattan
+   landmarks still dominate the OSM ridge.
+
+**Tests:** `s376-tests` 131841/0, `s376-fakehost-tests` 44835/0.
+**Budget:** `gpu_budget_ms=12.2` unchanged (980 Ti). Skyline mesh
+800 (was 400) — still under the 1.00 ms buildings line.
+
+**Frames (not in git):**
+`/opt/cursor/artifacts/kjfk_04r_0.6nm_r1_before.png` →
+`kjfk_04r_0.6nm_day_r3.png`; same for 3 nm and Manhattan.
+Night: `kjfk_04r_0.6nm_night_r3.png`,
+`kjfk_manhattan_2500_night_r3.png`.
+
+```
+s376-cache osm KJFK --city --out /tmp/kjfk-real   # reuses osm-tiles/
+s376-visual --offscreen --quality gtx980ti --cache-dir /tmp/kjfk-real \
+  --at KJFK:04R:0.6 --tod 12 --channel mid_left --screenshot /tmp/out.ppm
+```
+
+---
+
+## Previous increment (2026-10-19, PR #1)
 
 Work stays on **PR #1** (`cursor/s376-visual-v1-6852`). Accuracy-first.
 **980 Ti is the target.** No RSI / imagery / Raster files in git.

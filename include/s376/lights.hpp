@@ -79,8 +79,11 @@ float type_range_scale(LightKind kind); // 1 = full kMaxRangeFt
 bool is_als_family(LightKind kind);
 // Day size cap (px) so 0.6 nm noon ALS is a bar, not a bay flare.
 float day_als_size_px(LightKind kind, float night_w, float size_px);
-// Day intensity scale (1 at night). ALS family is ~0.28 at noon.
+// Day intensity scale (1 at night). ALS family is ~0.18 at noon (PAR-56
+// photometry: a readable warm bar, not a cyan bay wash).
 float day_als_intensity(LightKind kind, float night_w);
+// Daylight ALSF-2 is aviation white, not cyan. Warms and drops blue over water.
+void day_als_rgb(LightKind kind, float night_w, float& r, float& g, float& b);
 float max_range_m();
 // Inverse-square-ish fade; approach/PAPI keep a readable floor at 3 nm.
 float range_visibility(LightKind kind, float range_m);

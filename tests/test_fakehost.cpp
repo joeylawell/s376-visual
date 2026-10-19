@@ -290,13 +290,27 @@ static void test_wire() {
     fh::Frame air; air.alt_ft = 300; air.wheel_agl_ft = 280;
     fh::HatReply ra; ra.valid = true; ra.hat_ft = 290; ra.elev_ft = 10;
     c.note(air, ra, 11.9);
-    fh::Frame td = air; td.on_ground = true; td.alt_ft = 11.9 + 14; td.wheel_agl_ft = 0;
+    fh::Frame td = air; td.on_ground = true; td.alt_ft = 11.9 + fh::kEyeHeightFt; td.wheel_agl_ft = 0;
     fh::HatReply rt; rt.valid = true; rt.hat_ft = 14.2f; rt.elev_ft = 11.7f;
     c.note(td, rt, 11.9);
     CHECK(c.touchdown_ok());
     fh::HatReply rc; rc.valid = true; rc.hat_ft = -3; rc.elev_ft = 400;
     c.note(air, rc, 11.9);
     CHECK(c.contacts == 1);
+}
+
+static void test_b737300_eye() {
+    NEAR(fh::kEyeHeightFt, 13.2, 1e-9);
+    NEAR(fh::kB737300EyeFwdOfMainM, 12.0, 1e-9);
+    double lat = 0, lon = 0, alt = 0;
+    fh::place_b737300_eye(40.64, -73.78, 13.0, 0.0, 31.0, 0.0, lat, lon, alt);
+    NEAR(alt, 13.0 + 13.2, 1e-6); // parked: design eye AGL
+    const double d = s376::geo::ground_distance_m(40.64, -73.78, lat, lon);
+    NEAR(d, 12.0, 0.15); // cockpit is 12 m forward of the main gear
+    double lat2 = 0, lon2 = 0, alt2 = 0;
+    fh::place_b737300_eye(40.64, -73.78, 13.0, 200.0, 31.0, 2.5, lat2, lon2, alt2);
+    CHECK(alt2 > 13.0 + 200.0 + 13.2); // pitch lever-arm raises the eye
+    CHECK(alt2 < 13.0 + 200.0 + 13.2 + 3.0);
 }
 
 static void test_flight_model() {
@@ -332,7 +346,11 @@ static void test_flight_model() {
     fh::Controls idle = c; idle.throttle = 0;
     f = m.step(0.1, idle);
     CHECK(f.on_ground && f.gs_kt < 0.5);
-    NEAR(f.lat, rwy.thr_lat, 1e-6);
+    {
+        const double d = s376::geo::ground_distance_m(rwy.thr_lat, rwy.thr_lon, f.lat, f.lon);
+        NEAR(d, fh::kB737300EyeFwdOfMainM, 0.4); // cockpit, not the main-gear truck
+        NEAR(f.alt_ft, rwy.elev_ft + fh::kEyeHeightFt, 0.3);
+    }
 }
 
 static void test_ios() {
@@ -475,6 +493,7 @@ int main(int argc, char** argv) {
     test_profile_math();
     test_replay();
     test_wire();
+    test_b737300_eye();
     test_flight_model();
     test_ios();
     test_inprocess_e2e();

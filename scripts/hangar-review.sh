@@ -155,6 +155,13 @@ if [[ "$SHOTS" -eq 1 ]]; then
         --screenshot "$OUT/kjfk_13l_6nm_tod19_front.ppm"
     run "${IG[@]}" --at KJFK:13L:6 --tod 19 --wet --channel mid_left \
         --screenshot "$OUT/kjfk_13l_6nm_tod19_wet_front.ppm"
+    # 4-channel 50°×32.5° strip of the 6 nm final (737-300 design eye).
+    run "${IG[@]}" --at KJFK:04R:6 --tod 12 --channel strip \
+        --screenshot "$OUT/kjfk_04r_6nm_tod12_strip4.ppm"
+    run "${IG[@]}" --at KJFK:04R:6 --tod 19 --channel strip \
+        --screenshot "$OUT/kjfk_04r_6nm_tod19_strip4.ppm"
+    run "${IG[@]}" --at KJFK:04R:6 --tod 3 --channel strip \
+        --screenshot "$OUT/kjfk_04r_6nm_tod3_strip4.ppm"
     # Manhattan skyline (NW of JFK) + short-final terminals, day and night.
     run "${IG[@]}" --at KJFK --alt 2500 --hdg 310 --tod 12 --channel mid_left \
         --screenshot "$OUT/kjfk_manhattan_hdg310_tod12_front.ppm"

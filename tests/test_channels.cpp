@@ -58,6 +58,15 @@ void test_channels() {
     auto wrap = s376::wrap_channels(all);
     CHECK(wrap.size() == 3);
     CHECK(wrap[0].name == "far_left" && wrap[1].name == "mid_left" && wrap[2].name == "far_right");
+    auto strip4 = s376::strip4_channels(all);
+    CHECK(strip4.size() == 4);
+    CHECK(strip4[0].name == "far_left" && strip4[1].name == "mid_left");
+    CHECK(strip4[2].name == "mid_right" && strip4[3].name == "far_right");
+    CHECK_NEAR(strip4[0].hfov_deg, 50.0, 1e-9);
+    CHECK_NEAR(strip4[0].vfov_deg, 32.5, 1e-9);
+    int s4w = 0, s4h = 0;
+    s376::wrap_strip_size(strip4, s4w, s4h);
+    CHECK(s4w == 1920 * 4 && s4h == 1200);
     int sw = 0, sh = 0;
     s376::wrap_strip_size(wrap, sw, sh);
     CHECK(sw == 1920 * 3 && sh == 1200);

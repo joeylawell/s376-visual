@@ -112,10 +112,19 @@ void test_lights() {
     CHECK(!is_als_family(s376::LightKind::Vasi));
     CHECK(!is_als_family(s376::LightKind::Edge));
     CHECK_NEAR(day_als_intensity(s376::LightKind::Approach, 1.f), 1.0, 1e-4);
-    CHECK_NEAR(day_als_intensity(s376::LightKind::Approach, 0.f), 0.28, 1e-4);
+    CHECK_NEAR(day_als_intensity(s376::LightKind::Approach, 0.f), 0.18, 1e-4);
     CHECK_NEAR(day_als_intensity(s376::LightKind::Edge, 0.f), 1.0, 1e-4);
-    CHECK(day_als_size_px(s376::LightKind::Approach, 0.f, 8.f) <= 3.2f);
-    CHECK(day_als_size_px(s376::LightKind::Approach, 0.f, 8.f) >= 2.4f);
+    CHECK(day_als_size_px(s376::LightKind::Approach, 0.f, 8.f) <= 2.6f);
+    CHECK(day_als_size_px(s376::LightKind::Approach, 0.f, 8.f) >= 2.0f);
+    {
+        float r = 1.f, g = 1.f, b = 0.92f;
+        day_als_rgb(s376::LightKind::Approach, 0.f, r, g, b);
+        CHECK(b < 0.45f && g < 0.85f && r > 0.90f); // warm white, not cyan
+        r = g = b = 1.f;
+        day_als_rgb(s376::LightKind::Approach, 1.f, r, g, b);
+        CHECK_NEAR(r, 1.0, 1e-4);
+        CHECK_NEAR(g, 1.0, 1e-4);
+    }
     CHECK_NEAR(day_als_size_px(s376::LightKind::Approach, 1.f, 8.f), 8.0, 1e-4);
     CHECK_NEAR(day_als_size_px(s376::LightKind::Vasi, 0.f, 6.4f), 6.4, 1e-4);
     // JO 6850.2C: inboard (box 0) is HIGHEST. On path: 2 inner red, 2 outer white.

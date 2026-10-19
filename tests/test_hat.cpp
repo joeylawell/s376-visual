@@ -54,7 +54,7 @@ void test_hat() {
     auto src = std::make_shared<DemHeightSource>(dem);
     const double lat = 47.463684;
     const double lon = -122.307751;
-    const double alt = 447.0; // field 433 + 14 ft eye
+    const double alt = 433.0 + 13.2; // field + 737-300 design eye
     const HatSample hs = sample_hat(src.get(), lat, lon, alt);
     CHECK(hs.covered);
     CHECK_NEAR(hs.elev_ft, 433.0, 8.0);

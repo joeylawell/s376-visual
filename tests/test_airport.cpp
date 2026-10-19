@@ -323,7 +323,8 @@ void test_airport() {
         }
     CHECK(saw_c1 && saw_u1 && !saw_cc && saw_t5);
     CHECK(t5_h >= 24.f); // readable at 3 nm; schematic T5 is not a shed
-    CHECK(jfk.has_beacon && jfk.tower_h_m > 10.f);
+    CHECK(jfk.has_beacon && jfk.tower_h_m > 90.f); // PANYNJ 321 ft ATCT
+    CHECK_NEAR(jfk.tower_h_m, s376::kKjfkAtctHeightM, 0.2);
     CHECK(jfk.roads.size() >= 4);
     CHECK(jfk.routes.size() >= 12);
     CHECK(jfk.night.spacing_m >= 25 && jfk.night.spacing_m <= 50);
@@ -657,6 +658,8 @@ void test_airport() {
     CHECK(q.find("water") != std::string::npos);
     CHECK(q.find("highway") != std::string::npos);
     CHECK(q.find("motorway") != std::string::npos);
+    CHECK(q.find("control_tower") != std::string::npos);
+    CHECK(q.find("aeroway") != std::string::npos);
     CHECK(!s376::curl_glob_safe(q));
     const auto cmd = s376::http_get_command(url, "/tmp/s376-osm-test.json");
     CHECK(cmd.find(" -g ") != std::string::npos);
@@ -717,7 +720,33 @@ void test_airport() {
         CHECK(op.taxiways[0].from_osm);
         CHECK(op.buildings.size() == 1);
         CHECK(op.buildings[0].type == "terminal");
+        CHECK(op.buildings[0].kind == s376::BuildingKind::Airport);
         CHECK_NEAR(op.buildings[0].height_m, 22.0, 0.1);
+        CHECK(s376::osm_metro_tile_count("KJFK") == 6);
+        CHECK(s376::osm_metro_tiles("KJFK") != nullptr);
+        CHECK(s376::osm_metro_tile_count("KSEA") == 0);
+        {
+            s376::Building tall;
+            tall.name = "osm";
+            tall.type = "office";
+            tall.height_m = 200.f;
+            tall.ring = {{40.75, -74.00}, {40.75, -73.99}, {40.76, -73.99}, {40.76, -74.00}};
+            s376::Building house;
+            house.name = "osm";
+            house.type = "house";
+            house.height_m = 8.f;
+            house.ring = {{40.64, -73.78}, {40.64, -73.779}, {40.641, -73.779}};
+            std::vector<s376::Building> rank{house, tall};
+            s376::rank_osm_buildings(rank, 40.6399, -73.7787);
+            CHECK(rank[0].height_m > 100.f);
+            s376::Building t4;
+            t4.name = "Terminal 4";
+            t4.type = "terminal";
+            t4.height_m = 25.f;
+            s376::classify_osm_building(t4);
+            CHECK(t4.name == "T4" && t4.kind == s376::BuildingKind::Airport);
+            CHECK(s376::kMaxOsmBuildingsBake > s376::kMaxOsmBuildings);
+        }
         CHECK(op.roads.size() == 1);
         CHECK(op.roads[0].cls == s376::RoadClass::Primary);
         const auto tmp_op = (std::filesystem::temp_directory_path() / "s376-osm-overpass").string();
@@ -806,6 +835,18 @@ void test_airport() {
     CHECK(from_bin.buildings.size() == 1);
     CHECK_NEAR(from_bin.buildings.back().height_m, 18.0, 0.1);
     {
+        s376::Airport hg;
+        hg.icao = "KSFO";
+        CHECK(s376::merge_osm_json(hg, hangar) == 1);
+        CHECK(hg.buildings.back().type == "hangar");
+        CHECK(s376::write_osm_bin(hg, tmp + "/hangar.bin"));
+        s376::Airport hg2;
+        hg2.icao = "KSFO";
+        CHECK(s376::read_osm_bin(hg2, tmp + "/hangar.bin") >= 1);
+        CHECK(hg2.buildings.back().type == "hangar");
+        CHECK(hg2.buildings.back().kind == s376::BuildingKind::Airport);
+    }
+    {
         s376::SolidBvh solids;
         s376::fill_solids(solids, s376::SkylineEra::Current, {from_bin});
         double roof = 0;
@@ -832,7 +873,8 @@ void test_airport() {
         }
         s376::SolidBvh extra;
         CHECK(s376::merge_osm_file_stream(capped, tmp + "/osm.json", 0, &extra) >= 1);
-        CHECK(capped.buildings.size() == s376::kMaxOsmBuildings);
+        CHECK(capped.buildings.size() > s376::kMaxOsmBuildings);
+        CHECK(capped.buildings.size() <= s376::kMaxOsmBuildingsBake);
         extra.build();
         double roof = 0;
         CHECK(extra.roof_msl(37.61825, -122.3835, &roof));

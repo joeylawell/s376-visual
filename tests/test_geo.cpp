@@ -1,7 +1,10 @@
 #include "s376/geo.hpp"
 
 #include <cmath>
+#include <filesystem>
 #include <iostream>
+#include <utility>
+#include <vector>
 
 extern int g_fails;
 extern int g_passes;
@@ -71,15 +74,35 @@ void test_geo() {
     }
 
     // Soft US coasts: airports are land, nearby ocean / bays are water.
+    s376::geo::clear_shoreline_overlay();
     CHECK(s376::geo::land_coverage(40.6399, -73.7787) > 0.55); // KJFK
     CHECK(s376::geo::land_coverage(40.620, -73.840) < 0.40);   // Jamaica Bay
     CHECK(s376::geo::land_coverage(40.620, -73.774) < 0.40);   // 04R short final over the bay
     CHECK(s376::geo::land_coverage(40.500, -73.800) < 0.25);   // Atlantic south of Rockaway
     CHECK(s376::geo::land_coverage(40.565, -73.850) > 0.45);   // Rockaway barrier
+    CHECK(s376::geo::land_coverage(40.586, -73.860) < 0.35);   // Jamaica Bay (Grassy Bay)
+    CHECK(s376::geo::land_coverage(40.552, -73.850) < 0.30);   // Atlantic south of barrier
     CHECK(s376::geo::land_coverage(42.3656, -71.0096) > 0.55); // KBOS
     CHECK(s376::geo::land_coverage(37.6188, -122.3754) > 0.50); // KSFO pad
     CHECK(s376::geo::land_coverage(47.4502, -122.3088) > 0.50); // KSEA
     CHECK(s376::geo::land_coverage(0.0, -30.0) < 0.15);         // mid-Atlantic
+    {
+        s376::geo::clear_shoreline_overlay();
+        CHECK(s376::geo::shoreline_ring_count() == 0);
+        const auto sh = (std::filesystem::temp_directory_path() / "s376-shore.bin").string();
+        std::vector<std::vector<std::pair<double, double>>> rings;
+        rings.push_back({{40.610, -73.840},
+                         {40.610, -73.820},
+                         {40.630, -73.820},
+                         {40.630, -73.840}});
+        CHECK(s376::geo::write_shoreline_bin(rings, sh));
+        CHECK(s376::geo::load_shoreline_bin(sh));
+        CHECK(s376::geo::shoreline_ring_count() == 1);
+        CHECK(s376::geo::land_coverage(40.620, -73.830) < 0.20); // OSM water punch
+        CHECK(s376::geo::land_coverage(40.6399, -73.7787) > 0.55); // JFK field still land
+        s376::geo::clear_shoreline_overlay();
+        std::filesystem::remove(sh);
+    }
 
     CHECK_NEAR(s376::geo::dms_to_deg(40, 38, 23.741), 40.639928055, 1e-9);
     CHECK_NEAR(s376::geo::dms_to_deg(73, 46, 43.292, true), -73.778692222, 1e-9);

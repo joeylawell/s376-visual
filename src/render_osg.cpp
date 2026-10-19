@@ -88,6 +88,7 @@
 #include <cctype>
 #include <chrono>
 #include <cmath>
+#include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #ifdef __linux__
@@ -244,8 +245,9 @@ void main() {
     float chroma = albedo.b - max(albedo.r, albedo.g) * 0.85;
     float darkWater = (1.0 - smoothstep(0.04, 0.12, luma)) * smoothstep(0.04, 0.14, chroma);
     if (uWater > 0.5) {
-        float maskHint = clamp(vWaterMask, 0.0, 1.0) * smoothstep(-0.02, 0.10, chroma);
-        wet = max(wet, max(darkWater, maskHint * 0.55));
+        // Jamaica Bay ortho/synth is olive (g>b); do not require blue chroma.
+        float maskHint = clamp(vWaterMask, 0.0, 1.0);
+        wet = max(wet, max(darkWater, maskHint * 0.82));
     }
     vec2 wu = (dot(vWorld, vWorld) > 1.0) ? vWorld : vUV;
     float gness = clamp((albedo.g - albedo.r) * 4.0, 0.0, 1.0);
@@ -263,7 +265,7 @@ void main() {
         float qx = paved > 0.45 ? 0.5 : 0.0;
         float qy = gness > 0.35 ? 0.0 : 0.5;
         vec3 atlas = texture2D(sDetail, vec2(fract(duv.x) * 0.5 + qx, fract(duv.y) * 0.5 + qy)).rgb;
-        land = mix(mix(land, dirt, 0.18 * (1.0 - paved)), grass, gness * 0.42);
+        land = mix(mix(land, dirt, 0.08 * (1.0 - paved)), grass, gness * 0.22);
         land = mix(land, land * (0.50 + 0.95 * atlas), close);
         albedo = mix(albedo, land, uDetail * mid * (1.0 - wet));
         // Distant land desaturates into haze so the horizon is not cartoon green.
@@ -277,23 +279,29 @@ void main() {
         vec3 sun = normalize(uSunDir);
         float n1 = noise(wu * 520.0 + vec2(uTime * 0.07, uTime * 0.03));
         float n2 = noise(wu * 1280.0 + vec2(-uTime * 0.05, uTime * 0.09) + 11.0);
-        vec3 wn = normalize(n + vec3((n1 - 0.5) * 0.22, (n2 - 0.5) * 0.22, 0.0));
+        float wave = mix(0.06, 0.22, smoothstep(500.0, 4500.0, vEyeDist));
+        vec3 wn = normalize(n + vec3((n1 - 0.5) * wave, (n2 - 0.5) * wave, 0.0));
         float fres = pow(1.0 - clamp(dot(wn, view), 0.0, 1.0), 4.0);
         // Cap grazing Fresnel — Jamaica Bay at 3° is water, not a white slab.
         fres *= mix(1.0, 0.38, smoothstep(0.55, 0.94, fres));
-        vec3 deep = vec3(0.02, 0.07, 0.14);
-        vec3 shallow = vec3(0.04, 0.13, 0.20);
+        float latw = vWorld.y;
+        float lonw = vWorld.x;
+        float bay = step(40.54, latw) * step(latw, 40.68) * step(-74.02, lonw) * step(lonw, -73.72);
+        vec3 deep = mix(vec3(0.02, 0.07, 0.14), vec3(0.10, 0.20, 0.16), bay);
+        vec3 shallow = mix(vec3(0.04, 0.13, 0.20), vec3(0.16, 0.26, 0.18), bay);
         vec3 wcol = mix(deep, shallow, n1 * 0.40);
         vec3 skyref = mix(uFogColor * 0.52, vec3(0.14, 0.26, 0.40), 0.40);
         wcol = mix(wcol, skyref, 0.10 + 0.34 * fres);
         float glint = pow(max(dot(reflect(-sun, wn), view), 0.0), 280.0);
-        wcol += vec3(1.0, 0.95, 0.82) * glint * 0.06 * (1.0 - uNight * 0.90);
-        wcol *= (uAmbient + uDiffuse * (0.16 + 0.40 * max(dot(wn, sun), 0.0)));
+        float close = clamp(1.0 - vEyeDist / 1800.0, 0.0, 1.0);
+        wcol += vec3(1.0, 0.95, 0.82) * glint * mix(0.06, 0.015, max(close, bay * 0.65)) *
+                (1.0 - uNight * 0.90);
+        wcol *= (uAmbient + uDiffuse * (0.32 + 0.50 * max(dot(wn, sun), 0.0)));
         float foam = smoothstep(0.42, 0.68, wet) * (1.0 - smoothstep(0.78, 0.98, wet));
         foam *= 0.40 + 0.35 * noise(wu * 900.0 + vec2(uTime * 0.15, 0.0));
         wcol = mix(wcol, vec3(0.70, 0.76, 0.80), foam * 0.35);
         // Keep most of the ortho so marsh / shallow bay stay photographic.
-        col = mix(col, wcol, wet * 0.34);
+        col = mix(col, wcol, wet * mix(0.34, 0.48, bay));
     }
     if (uBloom > 0.5 && uNight > 0.25 && wet < 0.40) {
         float urban = smoothstep(0.14, 0.36, luma) * (1.0 - gness);
@@ -447,8 +455,8 @@ void main() {
         float mortar = smoothstep(0.08, 0.18, abs(fract(fu.x * 2.0) - 0.5));
         albedo *= mix(0.82, 1.0, mortar);
         albedo = mix(albedo, albedo * vec3(0.22, 0.28, 0.36), win * 0.70);
-        float glow = win * uNight * (0.28 + 0.72 * hash(floor(fu)));
-        albedo += vec3(1.0, 0.78, 0.42) * glow * 1.65;
+        float glow = win * uNight * (0.40 + 0.60 * hash(floor(fu)));
+        albedo += vec3(1.0, 0.82, 0.48) * glow * 3.10;
         albedo *= 0.75 + 0.25 * ndl;
         albedo *= mix(1.0, 0.85 + 0.15 * uSsao, 1.0);
     } else if (mat > 3.5 && mat < 4.5) {
@@ -1352,17 +1360,26 @@ osg::Image* make_globe_image(int w, int h) {
                 }
             }
             cover *= 0.25f;
-            const float ice = (lat > 70.f || lat < -60.f) ? 1.f : 0.f;
-            const float water_r = 0.07f, water_g = 0.16f, water_b = 0.38f;
-            const float land_r = 0.20f + 0.04f * ice, land_g = 0.38f - 0.10f * ice,
-                        land_b = 0.16f + 0.50f * ice;
-            const float r = water_r + (land_r - water_r) * cover;
-            const float g = water_g + (land_g - water_g) * cover;
-            const float b = water_b + (land_b - water_b) * cover;
             const int i = (y * w + x) * 3;
-            p[i] = static_cast<unsigned char>(std::max(0, std::min(255, int(r * 255.f))));
-            p[i + 1] = static_cast<unsigned char>(std::max(0, std::min(255, int(g * 255.f))));
-            p[i + 2] = static_cast<unsigned char>(std::max(0, std::min(255, int(b * 255.f))));
+            if (lat > 40.50 && lat < 40.82 && lon > -74.06 && lon < -73.70) {
+                std::uint8_t r = 0, g = 0, b = 0;
+                bool water = false;
+                kjfk_subset_land_rgb(lat, lon, r, g, b, water);
+                p[i] = r;
+                p[i + 1] = g;
+                p[i + 2] = b;
+            } else {
+                const float ice = (lat > 70.f || lat < -60.f) ? 1.f : 0.f;
+                const float water_r = 0.07f, water_g = 0.16f, water_b = 0.38f;
+                const float land_r = 0.20f + 0.04f * ice, land_g = 0.38f - 0.10f * ice,
+                            land_b = 0.16f + 0.50f * ice;
+                const float r = water_r + (land_r - water_r) * cover;
+                const float g = water_g + (land_g - water_g) * cover;
+                const float b = water_b + (land_b - water_b) * cover;
+                p[i] = static_cast<unsigned char>(std::max(0, std::min(255, int(r * 255.f))));
+                p[i + 1] = static_cast<unsigned char>(std::max(0, std::min(255, int(g * 255.f))));
+                p[i + 2] = static_cast<unsigned char>(std::max(0, std::min(255, int(b * 255.f))));
+            }
         }
     }
     return img;
@@ -1534,13 +1551,20 @@ osg::Node* make_dem_patch(const CacheRegion& cache, float aniso = 16.f) {
             const float cover = geo::land_coverage(lat, lon);
             const bool jfk_pad =
                 lat > 40.626 && lat < 40.662 && lon > -73.828 && lon < -73.752;
-            if (cover < 0.40f) {
-                z = 0.0; // flatten bay so 96² tiles are not a faceted green grid
-                water[static_cast<std::size_t>(i)] = 1;
-            } else if (jfk_pad && z < 10.0) {
+            const bool dem_wet = z < 0.80;
+            const bool dem_dry = z > 1.60;
+            if (jfk_pad && z < 10.0 && !dem_wet) {
                 // Synth land is 4 m / water 0 m. A mixed cell became the
                 // 2500 ft Manhattan-shot "tile triangle" across the pad.
                 z = 4.0;
+            } else if (dem_dry && cover > 0.20f) {
+                // 1 m 3DEP barrier / pad wins over the coarse GSHHS box.
+            } else if (dem_wet && cover < 0.85f) {
+                z = 0.0;
+                water[static_cast<std::size_t>(i)] = 1;
+            } else if (cover < 0.40f) {
+                z = 0.0; // flatten bay so 96² tiles are not a faceted green grid
+                water[static_cast<std::size_t>(i)] = 1;
             }
             zs[static_cast<std::size_t>(i)] = z;
         }
@@ -1666,7 +1690,8 @@ osg::Node* make_dem_patch(const CacheRegion& cache, float aniso = 16.f) {
 // sharp. Same land_coverage as the globe, so the edge is a color match
 // (no hard horizon seam). Land is raised a few metres over the ellipsoid.
 osg::Node* make_local_ground(double lat0, double lon0, double radius_km, float aniso) {
-    const int n = 80;
+    const bool jfk = lat0 > 40.3 && lat0 < 41.0 && lon0 > -74.3 && lon0 < -73.4;
+    const int n = jfk ? (radius_km <= 20.0 ? 240 : 160) : 80;
     const int tw = 384, th = 384;
     auto* img = new osg::Image;
     img->allocateImage(tw, th, 1, GL_RGB, GL_UNSIGNED_BYTE);
@@ -1677,18 +1702,27 @@ osg::Node* make_local_ground(double lat0, double lon0, double radius_km, float a
         const double lat = lat0 + rlat * (1.0 - 2.0 * (y + 0.5) / th);
         for (int x = 0; x < tw; ++x) {
             const double lon = lon0 + rlon * (2.0 * (x + 0.5) / tw - 1.0);
-            float cover = 0.f;
-            for (int sy = 0; sy < 2; ++sy)
-                for (int sx = 0; sx < 2; ++sx)
-                    cover += geo::land_coverage(lat + (sy - 0.5) * rlat / th,
-                                                lon + (sx - 0.5) * rlon / tw);
-            cover *= 0.25f;
-            const float wr = 0.07f, wg = 0.16f, wb = 0.38f;
-            const float lr = 0.22f, lg = 0.36f, lb = 0.16f;
             const int i = (y * tw + x) * 3;
-            px[i] = static_cast<unsigned char>((wr + (lr - wr) * cover) * 255.f);
-            px[i + 1] = static_cast<unsigned char>((wg + (lg - wg) * cover) * 255.f);
-            px[i + 2] = static_cast<unsigned char>((wb + (lb - wb) * cover) * 255.f);
+            if (jfk) {
+                std::uint8_t r = 0, g = 0, b = 0;
+                bool water = false;
+                kjfk_subset_land_rgb(lat, lon, r, g, b, water);
+                px[i] = r;
+                px[i + 1] = g;
+                px[i + 2] = b;
+            } else {
+                float cover = 0.f;
+                for (int sy = 0; sy < 2; ++sy)
+                    for (int sx = 0; sx < 2; ++sx)
+                        cover += geo::land_coverage(lat + (sy - 0.5) * rlat / th,
+                                                    lon + (sx - 0.5) * rlon / tw);
+                cover *= 0.25f;
+                const float wr = 0.07f, wg = 0.16f, wb = 0.38f;
+                const float lr = 0.22f, lg = 0.36f, lb = 0.16f;
+                px[i] = static_cast<unsigned char>((wr + (lr - wr) * cover) * 255.f);
+                px[i + 1] = static_cast<unsigned char>((wg + (lg - wg) * cover) * 255.f);
+                px[i + 2] = static_cast<unsigned char>((wb + (lb - wb) * cover) * 255.f);
+            }
         }
     }
 
@@ -1726,6 +1760,13 @@ osg::Node* make_local_ground(double lat0, double lon0, double radius_km, float a
             const unsigned a = static_cast<unsigned>(j * (n + 1) + i);
             const unsigned b = a + 1;
             const unsigned c = a + static_cast<unsigned>(n + 1);
+            if (jfk) {
+                // Water / coast only — packed tiles already paint Queens land.
+                const float wa = (*wuvs)[a].z(), wb = (*wuvs)[b].z();
+                const float wc = (*wuvs)[c].z(), wd = (*wuvs)[c + 1].z();
+                if (wa + wb + wc + wd < 0.5f)
+                    continue;
+            }
             idx->push_back(a);
             idx->push_back(c);
             idx->push_back(b);
@@ -2350,6 +2391,11 @@ void apply_light_steps(LightGpu& g, const HostState& host) {
         if (kind == LightKind::Flasher && seq >= 0 && !lights::sfl_on(t_s, seq))
             k = 0.f;
         osg::Vec4 b = g.base[i];
+        {
+            float rr = b.r(), gg = b.g(), bb = b.b();
+            lights::day_als_rgb(kind, night, rr, gg, bb);
+            b = osg::Vec4(rr, gg, bb, b.a());
+        }
         if (have_eye && i < g.rev.size() && g.rev[i].a() >= 0.f) {
             double brg = 0;
             geo::inverse_wgs84(host.eye.lat_deg, host.eye.lon_deg, g.lat[i], g.lon[i], &brg);
@@ -2767,6 +2813,8 @@ class OsgRenderer final : public Renderer {
                           cfg.render.earth_file.c_str());
         }
 #endif
+        if (!cfg.render.cache_dir.empty())
+            (void)geo::load_shoreline_bin(cfg.render.cache_dir + "/shoreline.bin");
         osg::ref_ptr<osg::Node> globe;
         if (!used_earth_)
             globe = make_procedural_globe(static_cast<float>(std::max(16, cfg.render.aniso)));
@@ -2812,16 +2860,26 @@ class OsgRenderer final : public Renderer {
                               "globe under packed tiles — lod1/lod2 page out to %.0f nm",
                               kFarFieldNm);
         }
-        if (!used_earth_ && tile_index_.empty()) {
+        if (!used_earth_) {
             const float an = static_cast<float>(cfg.render.aniso);
-            for (const auto& apt : all_public_airports()) {
-                if (auto* g = make_local_ground(apt.arp_lat, apt.arp_lon, 40.0, an)) {
-                    casters_->addChild(g);
-                    S376_LOG_INFO("render", "%s local ground  40 km", apt.icao.c_str());
+            // Always drape a KJFK metro disc. Packed lod0 is still paging the
+            // 04R/13L 1 m strip; without this disc the bay is globe hexes.
+            if (auto* g = make_local_ground(40.639925, -73.778694, 18.0, an)) {
+                if (auto* ss = g->getOrCreateStateSet())
+                    ss->setRenderBinDetails(-1, "RenderBin");
+                casters_->addChild(g);
+                S376_LOG_INFO("render", "KJFK local ground  18 km (under missing lod0)");
+            }
+            if (tile_index_.empty()) {
+                for (const auto& apt : all_public_airports()) {
+                    if (apt.icao == "KJFK")
+                        continue;
+                    if (auto* g = make_local_ground(apt.arp_lat, apt.arp_lon, 40.0, an)) {
+                        casters_->addChild(g);
+                        S376_LOG_INFO("render", "%s local ground  40 km", apt.icao.c_str());
+                    }
                 }
             }
-        } else if (!used_earth_ && !tile_index_.empty()) {
-            S376_LOG_INFO("render", "skip local-ground patches — packed tiles + globe cover the field");
         }
         {
             Airport merged;

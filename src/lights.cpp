@@ -240,16 +240,26 @@ float day_als_size_px(LightKind kind, float night_w, float size_px) {
     if (!is_als_family(kind) || night_w >= 0.20f)
         return size_px;
     // Noon 0.6 nm ALSF-2 over Jamaica Bay: hundreds of 8 px additive
-    // discs became a lens flare. Keep the bar, kill the bloom.
-    const float cap = 3.2f - 0.6f * (1.f - night_w / 0.20f);
-    return std::min(size_px, std::max(2.4f, cap));
+    // discs became a cyan flare. Keep a tight bar, kill the bloom.
+    const float cap = 2.6f - 0.4f * (1.f - night_w / 0.20f);
+    return std::min(size_px, std::max(2.0f, cap));
 }
 
 float day_als_intensity(LightKind kind, float night_w) {
     if (!is_als_family(kind) || night_w >= 0.20f)
         return 1.f;
     const float t = night_w / 0.20f;
-    return 0.28f + 0.72f * t;
+    // FAA ALSF-2 PAR-56 (~20 000 cd) is a warm bar in noon sun, not a wash.
+    return 0.18f + 0.82f * t;
+}
+
+void day_als_rgb(LightKind kind, float night_w, float& r, float& g, float& b) {
+    if (!is_als_family(kind) || night_w >= 0.20f)
+        return;
+    const float t = night_w / 0.20f;
+    r = std::min(1.f, r * (0.96f + 0.04f * t));
+    g = g * (0.80f + 0.20f * t);
+    b = b * (0.38f + 0.62f * t);
 }
 
 float type_range_scale(LightKind kind) {

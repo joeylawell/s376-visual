@@ -47,8 +47,18 @@ struct Frame {
     std::string phase;
 };
 
-constexpr double kEyeHeightFt = 14.0; // eye above main gear, same as s376-synth
+// Boeing 737-300 Airplane Characteristics for Airport Planning (D6-58325-6,
+// public): static design-eye ~13.2 ft AGL. Captain eye is ~12.0 m forward
+// of the main-gear truck (wheelbase 12.45 m, eye near the nose-gear).
+// alt_ft on the wire is always the pilot eye, MSL.
+constexpr double kEyeHeightFt = 13.2;
+constexpr double kB737300EyeFwdOfMainM = 12.0;
 constexpr double kAimPointFt = 1000.0; // ILS/visual aim point past threshold
+// Place the IG eyepoint at the 737-300 design eye given the main-gear
+// geodetic position and wheel height. Pitch raises the nose (~0.5 m at +2.5°).
+void place_b737300_eye(double gear_lat, double gear_lon, double field_elev_ft, double wheel_agl_ft,
+                       double hdg_deg, double pitch_deg, double& eye_lat, double& eye_lon,
+                       double& eye_alt_ft);
 
 // ---------------------------------------------------------------- distance
 // "6nm", "6sm", "10", "11112m", "6km". Bare number = nm.

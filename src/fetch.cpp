@@ -608,9 +608,24 @@ bool http_get_file(const std::string& url, const std::string& dest) {
     return false;
 }
 
+bool looks_like_overpass_json(const std::string& path) {
+    std::ifstream in(path, std::ios::binary);
+    if (!in)
+        return false;
+    char head[256] = {};
+    in.read(head, 255);
+    const std::string s(head);
+    if (s.find("<html") != std::string::npos || s.find("Not Acceptable") != std::string::npos)
+        return false;
+    return s.find('{') != std::string::npos &&
+           (s.find("elements") != std::string::npos || s.find("geometry") != std::string::npos ||
+            s.find("version") != std::string::npos);
+}
+
 bool http_post_file(const std::string& url, const std::string& body, const std::string& dest) {
     safety::check_data_url(url);
-    if (std::filesystem::exists(dest) && std::filesystem::file_size(dest) > 32) {
+    if (std::filesystem::exists(dest) && std::filesystem::file_size(dest) > 1024 &&
+        looks_like_overpass_json(dest)) {
         S376_LOG_INFO("cache", "resume skip %s", dest.c_str());
         return true;
     }
@@ -627,7 +642,13 @@ bool http_post_file(const std::string& url, const std::string& body, const std::
     std::filesystem::remove(body_file, ec);
     if (rc != 0)
         return false;
-    return std::filesystem::exists(dest) && std::filesystem::file_size(dest) > 32;
+    if (!std::filesystem::exists(dest) || std::filesystem::file_size(dest) < 64)
+        return false;
+    if (!looks_like_overpass_json(dest)) {
+        std::filesystem::remove(dest, ec);
+        return false;
+    }
+    return true;
 }
 
 std::size_t count_cache_tiles(const std::string& dir) {

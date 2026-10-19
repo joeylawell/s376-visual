@@ -1,5 +1,6 @@
 #include "s376/airport.hpp"
 #include "s376/diagnostics.hpp"
+#include "s376/landmarks.hpp"
 #include "s376/dxt.hpp"
 #include "s376/fetch.hpp"
 #include "s376/imagery.hpp"
@@ -12,6 +13,7 @@
 #include <algorithm>
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <string>
 
@@ -34,7 +36,7 @@ void usage() {
            "  s376-cache from-geotiff DEM.tif [--imagery FILE] [--out DIR] [--lods]\n"
            "  s376-cache import-raster DIR [--out cache/ICAO] [--icao ICAO] [--dry-run]\n"
            "  s376-cache pack-lods --from DIR --out DIR\n"
-           "  s376-cache osm ICAO [--out DIR] [--radius-km N] [--dry-run]\n"
+           "  s376-cache osm ICAO [--out DIR] [--radius-km N] [--city] [--dry-run]\n"
            "  s376-cache bake-osm DIR   stream-parse DIR/osm.json → DIR/osm.bin\n"
            "  s376-cache geojson ICAO [--out DIR]\n"
            "  s376-cache region ICAO [--out FILE]   print / write data/regions plan (--plan only)\n"
@@ -121,6 +123,7 @@ int main(int argc, char** argv) {
     bool lods = false;
     bool dry = false;
     bool plan_only = false;
+    bool city = false;
     std::string season = "summer";
     for (int i = 2; i < argc; ++i) {
         const std::string a = argv[i];
@@ -173,6 +176,8 @@ int main(int argc, char** argv) {
             dry = true;
         else if (a == "--plan")
             plan_only = true;
+        else if (a == "--city")
+            city = true;
         else if (a == "--season")
             season = need("--season");
         else if (a == "-h" || a == "--help") {
@@ -306,13 +311,28 @@ int main(int argc, char** argv) {
                 return 2;
             }
             const auto ref = s376::lookup_airport_ref(icao);
-            const double rkm = radius_km > 0 ? std::min(radius_km, 12.0) : 6.0;
-            const auto box = s376::box_from_radius(ref.lat, ref.lon, rkm);
-            const auto url =
-                s376::overpass_aeroway_url(box.south, box.west, box.north, box.east);
             std::string dest = out;
             if (dest.empty() || dest == "cache/ksea")
                 dest = std::string("cache/") + ref.icao;
+            const int ntiles = city ? s376::osm_metro_tile_count(ref.icao) : 0;
+            if (city && ntiles <= 0) {
+                std::cerr << "no metro Overpass tiles for " << ref.icao << "\n";
+                s376::log::shutdown();
+                return 2;
+            }
+            if (dry && ntiles > 0) {
+                const auto* tiles = s376::osm_metro_tiles(ref.icao);
+                for (int i = 0; i < ntiles; ++i)
+                    std::cout << ref.icao << " metro " << tiles[i].name << " "
+                              << tiles[i].south << "," << tiles[i].west << "," << tiles[i].north
+                              << "," << tiles[i].east << "\n";
+                s376::log::shutdown();
+                return 0;
+            }
+            const double rkm = radius_km > 0 ? std::min(radius_km, city ? 28.0 : 12.0) : 6.0;
+            const auto box = s376::box_from_radius(ref.lat, ref.lon, rkm);
+            const auto url =
+                s376::overpass_aeroway_url(box.south, box.west, box.north, box.east);
             const auto query =
                 s376::overpass_aeroway_query(box.south, box.west, box.north, box.east);
             std::cout << ref.icao << " overpass " << url << "\n";
@@ -326,6 +346,55 @@ int main(int argc, char** argv) {
                 return 0;
             }
             std::filesystem::create_directories(dest);
+            if (ntiles > 0) {
+                const auto* tiles = s376::osm_metro_tiles(ref.icao);
+                s376::Airport apt = s376::airport_by_icao(ref.icao);
+                s376::SolidBvh solids;
+                int n = 0;
+                const auto tile_dir = dest + "/osm-tiles";
+                std::filesystem::create_directories(tile_dir);
+                for (int i = 0; i < ntiles; ++i) {
+                    const auto q = s376::overpass_aeroway_query(
+                        tiles[i].south, tiles[i].west, tiles[i].north, tiles[i].east);
+                    const auto jp = tile_dir + "/" + tiles[i].name + ".json";
+                    const auto tu = s376::overpass_aeroway_url(
+                        tiles[i].south, tiles[i].west, tiles[i].north, tiles[i].east);
+                    std::cout << "  tile " << tiles[i].name << std::endl;
+                    bool have = false;
+                    if (std::filesystem::exists(jp) && std::filesystem::file_size(jp) > 2048) {
+                        std::ifstream chk(jp, std::ios::binary);
+                        char head[8] = {};
+                        chk.read(head, 8);
+                        have = chk && head[0] == '{' && std::string(head, 8).find('<') == std::string::npos;
+                    }
+                    if (have)
+                        std::cout << "    reuse " << jp << "\n";
+                    else if (!s376::http_post_file("https://overpass-api.de/api/interpreter", q, jp) &&
+                             !s376::http_post_file("https://overpass.openstreetmap.fr/api/interpreter",
+                                                   q, jp) &&
+                             !s376::http_get_file(tu, jp)) {
+                        std::cerr << "overpass tile " << tiles[i].name << " failed\n";
+                        continue;
+                    }
+                    n += s376::merge_osm_file_stream(apt, jp, 0, &solids);
+                }
+                s376::rank_osm_buildings(apt.buildings, apt.arp_lat, apt.arp_lon);
+                s376::prefer_osm_airport_massing(apt);
+                s376::apply_kjfk_roof_colours(apt);
+                (void)s376::geo::write_shoreline_bin(apt.water_rings, dest + "/shoreline.bin");
+                if (!s376::write_osm_bin(apt, dest + "/osm.bin")) {
+                    std::cerr << "write osm.bin failed\n";
+                    s376::log::shutdown();
+                    return 1;
+                }
+                solids.build();
+                (void)s376::write_solids_bin(solids, dest + "/solids.bin");
+                s376::write_airport_geojson(apt, dest + "/osm.geojson");
+                std::cout << "wrote " << dest << "/osm.bin + solids.bin  " << n
+                          << " OSM ways (ODbL — © OSM metro). IG does not load osm.json.\n";
+                s376::log::shutdown();
+                return 0;
+            }
             const std::string json_path = dest + "/osm.json";
             // POST the QL so [ ] never sit in the URL; GET with -g is the fallback.
             if (!s376::http_post_file("https://overpass-api.de/api/interpreter", query, json_path) &&

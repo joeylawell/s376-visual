@@ -763,6 +763,165 @@ bool is_airport_structure(const Building& b) {
     return true;
 }
 
+namespace {
+
+std::string lower_copy(std::string s) {
+    for (char& c : s)
+        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    return s;
+}
+
+bool is_house_type(const std::string& t) {
+    return t == "house" || t == "residential" || t == "apartments" || t == "detached" ||
+           t == "terrace" || t == "semidetached_house" || t == "garage" || t == "garages" ||
+           t == "hut" || t == "shed" || t == "cabin";
+}
+
+} // namespace
+
+void classify_osm_building(Building& b) {
+    const std::string key = lower_copy(b.type + " " + b.name);
+    auto has = [&](const char* s) { return key.find(s) != std::string::npos; };
+    if (has("terminal") || has("t1") || has("t4") || has("t5") || has("t7") || has("t8")) {
+        b.kind = BuildingKind::Airport;
+        if (has("terminal 4") || has("t4") || b.name == "T4")
+            b.name = "T4";
+        else if (has("terminal 5") || has("t5") || has("twa") || b.name == "T5")
+            b.name = "T5";
+        else if (has("terminal 8") || has("t8") || has("terminl 8") || b.name == "T8")
+            b.name = "T8";
+        else if (has("terminal 1") || has("t1") || b.name == "T1")
+            b.name = "T1";
+        else if (has("terminal 7") || has("t7") || b.name == "T7")
+            b.name = "T7";
+        else if (b.name.empty() || b.name == "osm")
+            b.name = "terminal";
+        if (b.type.empty())
+            b.type = "terminal";
+    } else if (has("hangar")) {
+        b.kind = BuildingKind::Airport;
+        if (b.name.empty() || b.name == "osm")
+            b.name = "hangar";
+        b.type = "hangar";
+    } else if (has("control_tower") || has("control tower") || has("atct")) {
+        b.kind = BuildingKind::Airport;
+        b.name = "ATCT";
+        b.type = "control_tower";
+        if (b.height_m < 40.f)
+            b.height_m = kKjfkAtctHeightM;
+    } else if (has("jet_bridge") || has("jetbridge") || has("aerobridge")) {
+        b.kind = BuildingKind::Airport;
+        if (b.name.empty() || b.name == "osm")
+            b.name = "jetbridge";
+        b.type = "jetbridge";
+    }
+}
+
+void rank_osm_buildings(std::vector<Building>& buildings, double arp_lat, double arp_lon) {
+    auto score = [&](const Building& b) {
+        double clat = 0, clon = 0;
+        building_centroid(b, clat, clon);
+        const double dlat = (clat - arp_lat) * 111.32;
+        const double dlon =
+            (clon - arp_lon) * 111.32 * std::max(0.2, std::cos(geo::deg2rad(arp_lat)));
+        const double km = std::sqrt(dlat * dlat + dlon * dlon);
+        double s = 0;
+        if (b.kind == BuildingKind::Airport)
+            s += 1.0e6;
+        if (b.height_m >= 80.f)
+            s += 5.0e5 + static_cast<double>(b.height_m) * 200.0;
+        else if (b.height_m >= kSkylineHeightM)
+            s += 2.0e5 + static_cast<double>(b.height_m) * 80.0;
+        if (km <= 2.2)
+            s += 5.0e4 - km * 1000.0;
+        else if (km <= 16.0)
+            s += 1.0e4 - km * 50.0;
+        s += static_cast<double>(b.ring.size());
+        return s;
+    };
+    std::sort(buildings.begin(), buildings.end(),
+              [&](const Building& a, const Building& b) { return score(a) > score(b); });
+}
+
+void prefer_osm_airport_massing(Airport& a) {
+    std::vector<char> drop(a.buildings.size(), 0);
+    for (std::size_t i = 0; i < a.buildings.size(); ++i) {
+        auto& b = a.buildings[i];
+        classify_osm_building(b);
+        if (b.kind != BuildingKind::Airport)
+            continue;
+        double clat = 0, clon = 0;
+        building_centroid(b, clat, clon);
+        // OSM terminal within 180 m of a schematic box of the same name wins.
+        for (std::size_t j = 0; j < a.buildings.size(); ++j) {
+            if (i == j || drop[j])
+                continue;
+            auto& o = a.buildings[j];
+            if (o.kind != BuildingKind::Airport)
+                continue;
+            if (b.name != o.name && !(b.name == "ATCT" && o.name == "ATCT"))
+                continue;
+            // Prefer the larger / more-detailed ring (OSM) over the 4-pt box.
+            if (b.ring.size() > o.ring.size() + 1)
+                drop[j] = 1;
+            else if (o.ring.size() > b.ring.size() + 1)
+                drop[i] = 1;
+        }
+    }
+    std::vector<Building> keep;
+    keep.reserve(a.buildings.size());
+    for (std::size_t i = 0; i < a.buildings.size(); ++i) {
+        if (!drop[i])
+            keep.push_back(std::move(a.buildings[i]));
+    }
+    a.buildings = std::move(keep);
+}
+
+void apply_kjfk_roof_colours(Airport& a) {
+    if (a.icao != "KJFK")
+        return;
+    for (auto& b : a.buildings) {
+        if (b.roof_r >= 0.f)
+            continue;
+        // NYS ortho / public aerials: light membrane roofs, not charcoal.
+        if (b.name == "T4") {
+            b.roof_r = 0.74f;
+            b.roof_g = 0.75f;
+            b.roof_b = 0.76f;
+        } else if (b.name == "T5") {
+            b.roof_r = 0.80f;
+            b.roof_g = 0.76f;
+            b.roof_b = 0.68f;
+        } else if (b.name == "T8") {
+            b.roof_r = 0.72f;
+            b.roof_g = 0.64f;
+            b.roof_b = 0.54f;
+        } else if (b.name == "T1") {
+            b.roof_r = 0.70f;
+            b.roof_g = 0.70f;
+            b.roof_b = 0.72f;
+        } else if (b.name == "T7") {
+            b.roof_r = 0.58f;
+            b.roof_g = 0.64f;
+            b.roof_b = 0.58f;
+        } else if (b.name == "ATCT") {
+            b.roof_r = 0.84f;
+            b.roof_g = 0.84f;
+            b.roof_b = 0.86f;
+            if (b.height_m < 40.f)
+                b.height_m = kKjfkAtctHeightM;
+        } else if (b.name == "hangar" || b.type == "hangar") {
+            b.roof_r = 0.38f;
+            b.roof_g = 0.40f;
+            b.roof_b = 0.42f;
+        } else if (b.name == "jetbridge" || b.type == "jetbridge") {
+            b.roof_r = 0.62f;
+            b.roof_g = 0.56f;
+            b.roof_b = 0.48f;
+        }
+    }
+}
+
 void building_centroid(const Building& b, double& lat, double& lon) {
     lat = lon = 0;
     if (b.ring.empty())
@@ -815,12 +974,12 @@ void building_palette(const Building& b, float& wr, float& wg, float& wb, float&
         rg = 0.22f;
         rb = 0.18f;
     } else if (has("commercial") || has("retail") || has("office") || has("hotel")) {
-        wr = 0.52f;
-        wg = 0.56f;
-        wb = 0.60f;
-        rr = 0.24f;
-        rg = 0.26f;
-        rb = 0.28f;
+        wr = 0.62f;
+        wg = 0.64f;
+        wb = 0.68f;
+        rr = 0.28f;
+        rg = 0.30f;
+        rb = 0.32f;
     } else if (has("garage") || has("garages") || has("parking") || has("transportation")) {
         wr = 0.50f;
         wg = 0.51f;
@@ -844,6 +1003,14 @@ void building_palette(const Building& b, float& wr, float& wg, float& wb, float&
         rg = 0.24f;
         rb = 0.26f;
     }
+    if (b.height_m >= 80.f) {
+        wr = 0.70f;
+        wg = 0.72f;
+        wb = 0.76f;
+        rr = 0.32f;
+        rg = 0.34f;
+        rb = 0.36f;
+    }
     float h = 0.f;
     for (unsigned char c : key)
         h = std::fmod(h * 31.f + static_cast<float>(c), 997.f);
@@ -853,9 +1020,15 @@ void building_palette(const Building& b, float& wr, float& wg, float& wb, float&
     wr = std::max(0.12f, std::min(0.86f, wr + j));
     wg = std::max(0.12f, std::min(0.86f, wg + j * 0.6f + j2 * 0.04f));
     wb = std::max(0.12f, std::min(0.86f, wb + j * 0.4f));
-    rr = std::max(0.10f, std::min(0.55f, rr + j * 0.5f));
-    rg = std::max(0.10f, std::min(0.55f, rg + j * 0.35f));
-    rb = std::max(0.10f, std::min(0.55f, rb + j * 0.25f));
+    const float rmax = b.kind == BuildingKind::Airport ? 0.88f : 0.55f;
+    rr = std::max(0.10f, std::min(rmax, rr + j * 0.5f));
+    rg = std::max(0.10f, std::min(rmax, rg + j * 0.35f));
+    rb = std::max(0.10f, std::min(rmax, rb + j * 0.25f));
+    if (b.roof_r >= 0.f && b.roof_g >= 0.f && b.roof_b >= 0.f) {
+        rr = b.roof_r;
+        rg = b.roof_g;
+        rb = b.roof_b;
+    }
 }
 
 Building jetbridge_building(const Jetbridge& j) {
@@ -990,6 +1163,7 @@ Airport kjfk_public() {
     a.buildings.push_back(box_building("hangar", 40.6515, -73.7940, 121.0, 180, 70, 16.f));
     a.buildings.push_back(box_building("cargo", 40.6550, -73.7720, 40.0, 200, 80, 14.f));
     add_kjfk_public_scenery(a);
+    apply_kjfk_roof_colours(a);
     generate_lights(a);
     return a;
 }
@@ -1215,12 +1389,12 @@ bool runway_shot_pose(const Airport& a, const std::string& ident, double dist_nm
     if (dist_nm <= 0.01) {
         // Lined up looking at the designators (threshold bars + 4R ahead).
         offset_m(lat0, lon0, hdg, 12.0, out.lat, out.lon);
-        out.alt_ft = elev_ft + 14.0;
+        out.alt_ft = elev_ft + 13.2; // 737-300 design eye, static
         out.pitch_deg = 0;
     } else {
         const double back = wrap360(hdg + 180.0);
         offset_m(lat0, lon0, back, dist_nm * 1852.0, out.lat, out.lon);
-        out.alt_ft = elev_ft + 14.0 + dist_nm * 318.0; // 3°
+        out.alt_ft = elev_ft + 13.2 + dist_nm * 318.0; // 3° + design eye
         out.pitch_deg = -3.0;
     }
     return true;
@@ -1338,16 +1512,20 @@ void apply_shot_overrides(ShotPose& p, const ShotOverrides& o) {
 
 std::string overpass_aeroway_query(double south, double west, double north, double east) {
     std::ostringstream o;
-    o << "[out:json][timeout:40];(way[\"aeroway\"=\"taxiway\"](" << south << "," << west << ","
+    o << "[out:json][timeout:90];(way[\"aeroway\"=\"taxiway\"](" << south << "," << west << ","
       << north << "," << east << ");way[\"aeroway\"=\"apron\"](" << south << "," << west << ","
-      << north << "," << east << ");way[\"building\"](" << south << "," << west << "," << north
-      << "," << east << ");way[\"natural\"=\"water\"](" << south << "," << west << "," << north
-      << "," << east << ");way[\"natural\"=\"coastline\"](" << south << "," << west << "," << north
-      << "," << east << ");way[\"highway\"=\"motorway\"](" << south << "," << west << "," << north
-      << "," << east << ");way[\"highway\"=\"trunk\"](" << south << "," << west << "," << north
-      << "," << east << ");way[\"highway\"=\"primary\"](" << south << "," << west << "," << north
-      << "," << east << ");way[\"highway\"=\"secondary\"](" << south << "," << west << "," << north
-      << "," << east << "););out geom;";
+      << north << "," << east << ");way[\"aeroway\"=\"terminal\"](" << south << "," << west << ","
+      << north << "," << east << ");way[\"aeroway\"=\"hangar\"](" << south << "," << west << ","
+      << north << "," << east << ");way[\"aeroway\"=\"control_tower\"](" << south << "," << west
+      << ","       << north << "," << east << ");way[\"aeroway\"=\"jet_bridge\"](" << south << "," << west
+      << "," << north << "," << east << ");way[\"building\"](" << south << "," << west << ","
+      << north << "," << east << ");way[\"natural\"=\"water\"](" << south << "," << west << ","
+      << north << "," << east << ");way[\"natural\"=\"coastline\"](" << south << "," << west << ","
+      << north << "," << east << ");way[\"highway\"=\"motorway\"](" << south << "," << west << ","
+      << north << "," << east << ");way[\"highway\"=\"trunk\"](" << south << "," << west << ","
+      << north << "," << east << ");way[\"highway\"=\"primary\"](" << south << "," << west << ","
+      << north << "," << east << ");way[\"highway\"=\"secondary\"](" << south << "," << west << ","
+      << north << "," << east << "););out geom;";
     return o.str();
 }
 
@@ -1489,6 +1667,30 @@ std::string overpass_aeroway_url(double south, double west, double north, double
     return o.str();
 }
 
+namespace {
+
+const OsmTile kKjfkMetro[] = {
+    {"jfk", 40.620, -73.830, 40.665, -73.745},
+    {"rockaway", 40.540, -73.960, 40.620, -73.740},
+    {"queens", 40.650, -73.900, 40.730, -73.740},
+    {"queensw", 40.680, -73.960, 40.760, -73.850},
+    {"lowermanh", 40.690, -74.030, 40.760, -73.960},
+    {"midtown", 40.740, -74.020, 40.790, -73.950},
+};
+
+} // namespace
+
+int osm_metro_tile_count(const std::string& icao) {
+    std::string id = icao;
+    for (char& c : id)
+        c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+    return id == "KJFK" ? static_cast<int>(sizeof(kKjfkMetro) / sizeof(kKjfkMetro[0])) : 0;
+}
+
+const OsmTile* osm_metro_tiles(const std::string& icao) {
+    return osm_metro_tile_count(icao) > 0 ? kKjfkMetro : nullptr;
+}
+
 int merge_osm_json(Airport& a, const std::string& json) {
     int added = 0;
     std::size_t pos = 0;
@@ -1513,14 +1715,19 @@ int merge_osm_json(Airport& a, const std::string& json) {
         std::string kind = "taxiway";
         float bldg_h = kDefaultBuildingHeightM;
         const std::string tags = osm_way_tags(json, g, end);
-        if (tags.find("\"building\"") != std::string::npos)
+        if (tags.find("\"building\"") != std::string::npos ||
+            tags.find("jet_bridge") != std::string::npos ||
+            tags.find("jetbridge") != std::string::npos ||
+            tags.find("aerobridge") != std::string::npos ||
+            tags.find("control_tower") != std::string::npos)
             kind = "building";
         else if (osm_tags_are_road(tags))
             kind = "road";
         else if (tags.find("apron") != std::string::npos)
             kind = "apron";
-        else if (tags.find("\"water\"") != std::string::npos ||
-                 tags.find("coastline") != std::string::npos)
+        else if (tags.find("\"water\"") != std::string::npos)
+            kind = "water";
+        else if (tags.find("coastline") != std::string::npos)
             kind = "skip";
         auto read_num = [&](const char* key) -> float {
             const std::string k = std::string("\"") + key + "\"";
@@ -1577,15 +1784,34 @@ int merge_osm_json(Airport& a, const std::string& json) {
                 return {};
             return tags.substr(q1 + 1, q2 - q1 - 1);
         };
+        if (kind == "water" && pts.size() >= 8 && a.water_rings.size() < 80) {
+            std::vector<std::pair<double, double>> ring;
+            const auto step = std::max<std::size_t>(1, pts.size() / 96);
+            ring.reserve(pts.size() / step + 1);
+            for (std::size_t i = 0; i < pts.size(); i += step)
+                ring.push_back(pts[i]);
+            if (ring.size() >= 4)
+                a.water_rings.push_back(std::move(ring));
+            ++added;
+            pos = end + 1;
+            continue;
+        }
         if (pts.size() >= 2 && kind != "skip") {
             if (kind == "building") {
                 Building b;
-                b.name = "osm";
+                b.name = tag_str("name");
+                if (b.name.empty())
+                    b.name = tag_str("ref");
+                if (b.name.empty())
+                    b.name = "osm";
                 b.type = tag_str("building");
+                if (b.type.empty())
+                    b.type = tag_str("aeroway");
                 if (b.type == "yes" || b.type == "no")
                     b.type.clear();
                 b.ring = std::move(pts);
                 b.height_m = bldg_h;
+                classify_osm_building(b);
                 a.buildings.push_back(std::move(b));
             } else if (kind == "apron") {
                 Apron ap;
@@ -1707,8 +1933,13 @@ int merge_osm_file_stream(Airport& a, const std::string& path, std::uint64_t max
             if (solids) {
                 for (std::size_t i = b0; i < a.buildings.size(); ++i)
                     solids->add_building(a.buildings[i], a.elev_m);
-                if (a.buildings.size() > kMaxOsmBuildings)
-                    a.buildings.resize(kMaxOsmBuildings);
+                // Do not evict at 12 k — Queens houses used to drop Midtown
+                // (height 443 m). Rank in batches so 200 k Queens ways do
+                // not sort 80 k buildings on every extra house.
+                if (a.buildings.size() > kMaxOsmBuildingsBake + 4000) {
+                    rank_osm_buildings(a.buildings, a.arp_lat, a.arp_lon);
+                    a.buildings.resize(kMaxOsmBuildingsBake);
+                }
             }
             pos = end + 1;
             if (pos > 128 * 1024) {
@@ -1784,30 +2015,36 @@ bool write_osm_bin(const Airport& a, const std::string& path) {
     if (!o)
         return false;
     o.write("S376OSM1", 8);
-    write_u32(o, 2);
-    const auto nt = std::min<std::size_t>(a.taxiways.size(), kMaxOsmTaxiways);
-    const auto na = std::min<std::size_t>(a.aprons.size(), kMaxOsmAprons);
-    const auto nb = std::min<std::size_t>(a.buildings.size(), kMaxOsmBuildings);
-    const auto nr = std::min<std::size_t>(a.roads.size(), kMaxOsmRoads);
+    write_u32(o, 3);
+    Airport ranked = a;
+    rank_osm_buildings(ranked.buildings, a.arp_lat, a.arp_lon);
+    const auto nt = std::min<std::size_t>(ranked.taxiways.size(), kMaxOsmTaxiways);
+    const auto na = std::min<std::size_t>(ranked.aprons.size(), kMaxOsmAprons);
+    const auto nb = std::min<std::size_t>(ranked.buildings.size(), kMaxOsmBuildings);
+    const auto nr = std::min<std::size_t>(ranked.roads.size(), kMaxOsmRoads);
     write_u32(o, static_cast<std::uint32_t>(nt));
     write_u32(o, static_cast<std::uint32_t>(na));
     write_u32(o, static_cast<std::uint32_t>(nb));
     for (std::size_t i = 0; i < nt; ++i)
-        write_poly(o, a.taxiways[i].name, static_cast<float>(a.taxiways[i].width_m), a.taxiways[i].path);
+        write_poly(o, ranked.taxiways[i].name, static_cast<float>(ranked.taxiways[i].width_m),
+                   ranked.taxiways[i].path);
     for (std::size_t i = 0; i < na; ++i)
-        write_poly(o, a.aprons[i].name, 0.f, a.aprons[i].ring);
-    for (std::size_t i = 0; i < nb; ++i)
-        write_poly(o, a.buildings[i].name, a.buildings[i].height_m, a.buildings[i].ring);
+        write_poly(o, ranked.aprons[i].name, 0.f, ranked.aprons[i].ring);
+    for (std::size_t i = 0; i < nb; ++i) {
+        write_poly(o, ranked.buildings[i].name, ranked.buildings[i].height_m,
+                   ranked.buildings[i].ring);
+        write_poly(o, ranked.buildings[i].type, 0.f, {});
+    }
     write_u32(o, static_cast<std::uint32_t>(nr));
     for (std::size_t i = 0; i < nr; ++i) {
         float cls = 3.f;
-        if (a.roads[i].cls == RoadClass::Motorway)
+        if (ranked.roads[i].cls == RoadClass::Motorway)
             cls = 0.f;
-        else if (a.roads[i].cls == RoadClass::Trunk)
+        else if (ranked.roads[i].cls == RoadClass::Trunk)
             cls = 1.f;
-        else if (a.roads[i].cls == RoadClass::Primary)
+        else if (ranked.roads[i].cls == RoadClass::Primary)
             cls = 2.f;
-        write_poly(o, a.roads[i].name, cls, a.roads[i].path);
+        write_poly(o, ranked.roads[i].name, cls, ranked.roads[i].path);
     }
     return static_cast<bool>(o);
 }
@@ -1821,8 +2058,8 @@ int read_osm_bin(Airport& a, const std::string& path) {
     if (!i || std::memcmp(mag, "S376OSM1", 8) != 0)
         return 0;
     std::uint32_t ver = 0, nt = 0, na = 0, nb = 0;
-    if (!read_u32(i, ver) || (ver != 1 && ver != 2) || !read_u32(i, nt) || !read_u32(i, na) ||
-        !read_u32(i, nb))
+    if (!read_u32(i, ver) || (ver != 1 && ver != 2 && ver != 3) || !read_u32(i, nt) ||
+        !read_u32(i, na) || !read_u32(i, nb))
         return 0;
     int added = 0;
     for (std::uint32_t n = 0; n < nt; ++n) {
@@ -1847,6 +2084,13 @@ int read_osm_bin(Airport& a, const std::string& path) {
         Building b;
         if (!read_poly(i, b.name, b.height_m, b.ring))
             break;
+        if (ver >= 3) {
+            float z = 0;
+            std::vector<std::pair<double, double>> unused;
+            if (!read_poly(i, b.type, z, unused))
+                break;
+        }
+        classify_osm_building(b);
         a.buildings.push_back(std::move(b));
         ++added;
     }
@@ -1965,9 +2209,15 @@ int try_load_osm(Airport& a, const std::string& cache_dir) {
             continue;
         const int n = read_osm_bin(a, p);
         if (n > 0) {
-            const auto sp = std::filesystem::path(p).parent_path() / "solids.bin";
+            prefer_osm_airport_massing(a);
+            apply_kjfk_roof_colours(a);
+            const auto parent = std::filesystem::path(p).parent_path();
+            const auto sp = parent / "solids.bin";
             if (std::filesystem::exists(sp))
                 a.solids_path = sp.string();
+            const auto sh = parent / "shoreline.bin";
+            if (std::filesystem::exists(sh))
+                (void)geo::load_shoreline_bin(sh.string());
             return n;
         }
     }
@@ -2153,13 +2403,13 @@ AirportMesh build_airport_mesh(const Airport& a, bool buildings, bool markings) 
         double ci = 0, coi = 0, cj = 0, coj = 0;
         return bldg_km(i, ci, coi) < bldg_km(j, cj, coj);
     });
-    int n_campus = 0, n_city = 0;
+    int n_campus = 0, n_city = 0, n_sky = 0;
     auto emit = [&](const Building& b, double clat, double clon, bool far) {
         if (on_official_pavement(a, clat, clon))
             return false;
         float h = b.height_m;
-        if (b.kind == BuildingKind::Osm)
-            h = std::min(h, 80.f);
+        if (b.kind == BuildingKind::Osm && is_house_type(b.type) && h > 80.f)
+            h = 80.f;
         h = std::max(2.f, h);
         const double z0 = session_ground_m(clat, clon, a.elev_m) + kBuildingSitM;
         const double z1 = z0 + static_cast<double>(h);
@@ -2194,14 +2444,22 @@ AirportMesh build_airport_mesh(const Airport& a, bool buildings, bool markings) 
             (void)bldg_km(idx, clat, clon);
             emit(b, clat, clon, false);
         }
-        // OSM campus around the ARP, then Queens/Brooklyn/Rockaway ring.
-        // Sorting only by ARP used to fill the 2500 cap with airfield sheds.
+        // OSM campus around the ARP, tall skyline to 28 km, then the
+        // Queens/Brooklyn/Rockaway house ring. Sorting only by ARP used
+        // to fill the 2500 cap with airfield sheds.
         for (std::size_t idx : order) {
             const auto& b = a.buildings[idx];
             if (b.kind != BuildingKind::Osm || b.ring.size() < 3)
                 continue;
             double clat = 0, clon = 0;
             const double km = bldg_km(idx, clat, clon);
+            if (b.height_m >= kSkylineHeightM && km <= kSkylineRingKm) {
+                if (n_sky >= kMeshBuildingsSkyline)
+                    continue;
+                if (emit(b, clat, clon, km > 14.0 && b.height_m < 80.f))
+                    ++n_sky;
+                continue;
+            }
             if (km <= 2.2) {
                 if (n_campus >= kMeshBuildingsNear)
                     continue;

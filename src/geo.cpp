@@ -2,6 +2,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
+#include <cstring>
+#include <fstream>
 
 namespace s376::geo {
 
@@ -234,7 +237,122 @@ double lerp_coast(double lat, const double* lats, const double* lons, int n) {
     return lons[n - 1];
 }
 
+// Soft corridor around a polyline (degrees). Used for thin barrier islands
+// where a lat/lon box paints a fat rectangle into Jamaica Bay / the Atlantic.
+float corridor(double lat, double lon, const double* lats, const double* lons, int n,
+               float half_deg) {
+    float best = 1e9f;
+    for (int i = 0; i < n - 1; ++i) {
+        const double ax = lons[i], ay = lats[i];
+        const double bx = lons[i + 1], by = lats[i + 1];
+        const double vx = bx - ax, vy = by - ay;
+        const double wx = lon - ax, wy = lat - ay;
+        const double vv = vx * vx + vy * vy;
+        double t = vv > 1e-12 ? (wx * vx + wy * vy) / vv : 0.0;
+        t = std::max(0.0, std::min(1.0, t));
+        const float dx = static_cast<float>(lon - (ax + t * vx));
+        const float dy = static_cast<float>(lat - (ay + t * vy));
+        best = std::min(best, std::sqrt(dx * dx + dy * dy));
+    }
+    return 1.f - smooth01(half_deg * 0.55f, half_deg * 1.45f, best);
+}
+
+struct ShorelineOverlay {
+    std::vector<std::vector<std::pair<double, double>>> rings;
+};
+
+ShorelineOverlay& shoreline() {
+    static ShorelineOverlay o;
+    return o;
+}
+
+bool point_in_ring(double lat, double lon, const std::vector<std::pair<double, double>>& ring) {
+    if (ring.size() < 3)
+        return false;
+    bool inside = false;
+    for (std::size_t i = 0, j = ring.size() - 1; i < ring.size(); j = i++) {
+        const double yi = ring[i].first, xi = ring[i].second;
+        const double yj = ring[j].first, xj = ring[j].second;
+        const bool hit = ((yi > lat) != (yj > lat)) &&
+                         (lon < (xj - xi) * (lat - yi) / (yj - yi + 1e-18) + xi);
+        if (hit)
+            inside = !inside;
+    }
+    return inside;
+}
+
 } // namespace
+
+bool write_shoreline_bin(const std::vector<std::vector<std::pair<double, double>>>& water_rings,
+                         const std::string& path) {
+    std::ofstream o(path, std::ios::binary);
+    if (!o)
+        return false;
+    o.write("S376SH01", 8);
+    std::vector<const std::vector<std::pair<double, double>>*> order;
+    order.reserve(water_rings.size());
+    for (const auto& r : water_rings) {
+        if (r.size() >= 4)
+            order.push_back(&r);
+    }
+    std::sort(order.begin(), order.end(),
+              [](const auto* a, const auto* b) { return a->size() > b->size(); });
+    const auto n = std::min<std::size_t>(order.size(), 64);
+    const auto nu = static_cast<std::uint32_t>(n);
+    o.write(reinterpret_cast<const char*>(&nu), 4);
+    for (std::size_t i = 0; i < n; ++i) {
+        const auto& ring = *order[i];
+        const auto step = std::max<std::size_t>(1, ring.size() / 96);
+        std::uint32_t npts = 0;
+        for (std::size_t k = 0; k < ring.size(); k += step)
+            ++npts;
+        o.write(reinterpret_cast<const char*>(&npts), 4);
+        for (std::size_t k = 0; k < ring.size(); k += step) {
+            o.write(reinterpret_cast<const char*>(&ring[k].first), 8);
+            o.write(reinterpret_cast<const char*>(&ring[k].second), 8);
+        }
+    }
+    return static_cast<bool>(o);
+}
+
+bool load_shoreline_bin(const std::string& path) {
+    std::ifstream i(path, std::ios::binary);
+    if (!i)
+        return false;
+    char mag[8];
+    i.read(mag, 8);
+    if (!i || std::memcmp(mag, "S376SH01", 8) != 0)
+        return false;
+    std::uint32_t n = 0;
+    i.read(reinterpret_cast<char*>(&n), 4);
+    if (!i || n > 128)
+        return false;
+    ShorelineOverlay o;
+    o.rings.resize(n);
+    for (std::uint32_t r = 0; r < n; ++r) {
+        std::uint32_t npts = 0;
+        i.read(reinterpret_cast<char*>(&npts), 4);
+        if (!i || npts < 3 || npts > 4000)
+            return false;
+        o.rings[r].resize(npts);
+        for (auto& p : o.rings[r]) {
+            i.read(reinterpret_cast<char*>(&p.first), 8);
+            i.read(reinterpret_cast<char*>(&p.second), 8);
+            if (!i)
+                return false;
+        }
+    }
+    shoreline() = std::move(o);
+    return true;
+}
+
+void clear_shoreline_overlay() {
+    shoreline().rings.clear();
+}
+
+int shoreline_ring_count() {
+    return static_cast<int>(shoreline().rings.size());
+}
 
 float land_coverage(double lat, double lon) {
     float land = 0.f;
@@ -260,10 +378,36 @@ float land_coverage(double lat, double lon) {
 
     // Long Island + Rockaway barrier (KJFK photos). Soft so coasts are not stairs.
     land = std::max(land, soft_box(lat, lon, 40.58, 41.18, -74.06, -71.86, 0.03));
-    land = std::min(land, 1.f - 0.96f * soft_box(lat, lon, 40.598, 40.652, -73.900, -73.778, 0.008));
-    // South/east Jamaica Bay — 04L/04R short final sits over water, not the LI box.
-    land = std::min(land, 1.f - 0.96f * soft_box(lat, lon, 40.588, 40.625, -73.812, -73.742, 0.005));
-    land = std::max(land, soft_box(lat, lon, 40.545, 40.588, -73.96, -73.73, 0.008)); // Rockaway
+    const bool kjfk_metro = lat > 40.50 && lat < 40.80 && lon > -74.05 && lon < -73.70;
+    if (kjfk_metro && !shoreline().rings.empty()) {
+        // OSM natural=water (Jamaica Bay, basins, inlets). Replaces the
+        // three rectangular holes that painted a cross-shaped bay.
+        for (const auto& ring : shoreline().rings) {
+            if (point_in_ring(lat, lon, ring)) {
+                land = std::min(land, 0.05f);
+                break;
+            }
+        }
+        // 04L/04R short final is open water (not a closed OSM pond).
+        land = std::min(land, 1.f - 0.96f * soft_box(lat, lon, 40.588, 40.625, -73.812, -73.742, 0.005));
+    } else {
+        land = std::min(land, 1.f - 0.96f * soft_box(lat, lon, 40.598, 40.652, -73.900, -73.778, 0.008));
+        // South/east Jamaica Bay — 04L/04R short final sits over water, not the LI box.
+        land = std::min(land, 1.f - 0.96f * soft_box(lat, lon, 40.588, 40.625, -73.812, -73.742, 0.005));
+        // Bay north of the thin Rockaway corridor (the LI fade still painted it land).
+        land = std::min(land, 1.f - 0.96f * soft_box(lat, lon, 40.568, 40.598, -73.900, -73.790, 0.004));
+        // OSM-derived basins (Bergen / Thurston / Grassy) so the fallback
+        // is less of a plus-sign when shoreline.bin is absent.
+        land = std::min(land, 1.f - 0.90f * soft_box(lat, lon, 40.645, 40.662, -73.840, -73.829, 0.003));
+        land = std::min(land, 1.f - 0.90f * soft_box(lat, lon, 40.595, 40.640, -73.833, -73.814, 0.004));
+    }
+    // Rockaway / Breezy Point is a thin barrier (OSM/NOAA shoreline), not a
+    // 0.04° rectangle. A fat box painted the bay and the Atlantic as land.
+    static const double rlat[] = {40.5475, 40.5540, 40.5605, 40.5668, 40.5728,
+                                  40.5788, 40.5850, 40.5912, 40.5970};
+    static const double rlon[] = {-73.9440, -73.9220, -73.9000, -73.8780, -73.8560,
+                                  -73.8340, -73.8100, -73.7860, -73.7600};
+    land = std::max(land, corridor(lat, lon, rlat, rlon, 9, 0.0032f)); // ~350 m half-width
     land = std::max(land, soft_box(lat, lon, 40.626, 40.662, -73.828, -73.752, 0.006)); // JFK field
     land = std::max(land, soft_box(lat, lon, 41.52, 42.10, -70.62, -69.90, 0.04));     // Cape Cod
     land = std::max(land, soft_box(lat, lon, 42.20, 42.48, -71.20, -70.85, 0.03));     // Boston neck

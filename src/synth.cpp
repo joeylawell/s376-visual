@@ -25,7 +25,7 @@
 namespace s376 {
 namespace {
 
-constexpr double kEyeHeightFt = 14.0;
+constexpr double kEyeHeightFt = 13.2; // 737-300 design eye, same as fakehost
 constexpr double kEarthRft = 20925646.0;
 
 double wrap360(double a) {

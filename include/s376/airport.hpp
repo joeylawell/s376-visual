@@ -46,12 +46,19 @@ enum class LightKind {
 constexpr std::size_t kMaxOsmTaxiways = 800;
 constexpr std::size_t kMaxOsmAprons = 200;
 constexpr std::size_t kMaxOsmBuildings = 12000;
+// Bake working set: keep every footprint until rank_osm_buildings, then
+// write_osm_bin caps the mesh. Queens houses must not evict Manhattan.
+constexpr std::size_t kMaxOsmBuildingsBake = 80000;
 constexpr std::size_t kMaxOsmRoads = 400;
 // Airfield campus (≤ ~2.2 km of ARP): full-detail walls.
 constexpr int kMeshBuildingsNear = 800;
 // Neighbourhood ring (0.8–16 km): Queens / Brooklyn / Rockaway houses.
 // Official + landmark buildings are always meshed and do not count here.
 constexpr int kMeshBuildingsFar = 2500;
+// Tall OSM footprints 0.8–28 km (Manhattan / Queens cores). Real heights.
+constexpr int kMeshBuildingsSkyline = 800;
+constexpr float kSkylineHeightM = 40.f;
+constexpr double kSkylineRingKm = 28.0;
 // OSM `height`, else `building:levels` × this, else the default. Metres AGL.
 constexpr float kOsmLevelHeightM = 3.5f;
 constexpr float kDefaultBuildingHeightM = 12.f; // ~4 storeys when OSM is silent
@@ -172,6 +179,9 @@ struct Building {
     float height_m = 12;
     BuildingKind kind = BuildingKind::Osm;
     std::string type; // OSM building=* or schematic role (hangar/cargo/…)
+    float roof_r = -1.f; // <0 = palette; else imagery / public roof colour
+    float roof_g = -1.f;
+    float roof_b = -1.f;
 };
 
 struct AirportSign {
@@ -211,6 +221,11 @@ struct Jetbridge {
 
 // Schematic terminals / hangars / ATCT / cargo — not OSM houses.
 bool is_airport_structure(const Building& b);
+// Promote OSM terminal/hangar/tower ways.
+void classify_osm_building(Building& b);
+void rank_osm_buildings(std::vector<Building>& buildings, double arp_lat, double arp_lon);
+// Public PANYNJ / FAA JFK ATCT architectural height (321 ft).
+constexpr float kKjfkAtctHeightM = 97.8f;
 // Same footprint as the jetbridge mesh strip (length × 4.4 m).
 Building jetbridge_building(const Jetbridge& j);
 void building_centroid(const Building& b, double& lat, double& lon);
@@ -270,6 +285,8 @@ struct Airport {
     std::vector<SceneRoute> routes;
     std::vector<Marshaller> marshallers;
     std::vector<Road> roads;
+    // OSM natural=water rings (bake → shoreline.bin). Not meshed.
+    std::vector<std::vector<std::pair<double, double>>> water_rings;
     NightLayer night;
     double tower_lat = 0;
     double tower_lon = 0;
@@ -372,6 +389,13 @@ int merge_osm_json(Airport& a, const std::string& json);
 std::string overpass_aeroway_query(double south, double west, double north, double east);
 // GET URL with [ ] { } percent-encoded so curl globbing cannot expand it.
 std::string overpass_aeroway_url(double south, double west, double north, double east);
+// KJFK / Queens / Manhattan / Rockaway Overpass tiles (ODbL). Name + SWNE.
+struct OsmTile {
+    const char* name;
+    double south, west, north, east;
+};
+int osm_metro_tile_count(const std::string& icao);
+const OsmTile* osm_metro_tiles(const std::string& icao);
 // Load that JSON from a file (0 if missing). For bake tools only — the
 // renderer must not open a 400 MB Overpass dump.
 int try_merge_osm_file(Airport& a, const std::string& path);
@@ -385,6 +409,8 @@ int read_osm_bin(Airport& a, const std::string& path);
 int bake_osm_bin(const std::string& json_path, const std::string& bin_path);
 // Runtime: osm.bin only. Does not open osm.json.
 int try_load_osm(Airport& a, const std::string& cache_dir);
+void prefer_osm_airport_massing(Airport& a);
+void apply_kjfk_roof_colours(Airport& a);
 
 void generate_lights(Airport& a);
 void add_kjfk_public_scenery(Airport& a); // 2022 taxi names, T5, tower, trees…

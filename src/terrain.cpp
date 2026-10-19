@@ -761,9 +761,9 @@ void kjfk_subset_land_rgb(double lat, double lon, std::uint8_t& r, std::uint8_t&
     };
     if (water) {
         const bool atlantic = lat < 40.545 || (lat < 40.575 && lon > -73.84);
-        const double base_r = atlantic ? 12.0 : 18.0;
-        const double base_g = atlantic ? 40.0 : 52.0;
-        const double base_b = atlantic ? 86.0 : 104.0;
+        const double base_r = atlantic ? 12.0 : 32.0;
+        const double base_g = atlantic ? 40.0 : 74.0;
+        const double base_b = atlantic ? 86.0 : 72.0;
         r = clamp8(base_r + (n - 0.5) * 8.0);
         g = clamp8(base_g + (n2 - 0.5) * 10.0);
         b = clamp8(base_b + (n - 0.5) * 12.0);
@@ -785,9 +785,9 @@ void kjfk_subset_land_rgb(double lat, double lon, std::uint8_t& r, std::uint8_t&
         bg = 94;
         bb = 92;
     } else if (urban) {
-        br = 90;
-        bg = 88;
-        bb = 82;
+        br = 78;
+        bg = 84;
+        bb = 76;
     } else if (field) {
         br = 86;
         bg = 100;

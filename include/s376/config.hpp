@@ -175,6 +175,9 @@ std::vector<ChannelConfig> select_channels(const AppConfig& cfg, const std::stri
 // Unique Raster wrap Left | Front | Right. Skips the FO front duplicate
 // (mid_right) and non-channel roles (host_io / ios).
 std::vector<ChannelConfig> wrap_channels(const std::vector<ChannelConfig>& channels);
+// Four projector frusta (far_left | mid_left | mid_right | far_right).
+// Keeps the duplicated front so a --channel strip shot is 4 × 50°×32.5°.
+std::vector<ChannelConfig> strip4_channels(const std::vector<ChannelConfig>& channels);
 void wrap_strip_size(const std::vector<ChannelConfig>& channels, int& w, int& h);
 
 // Desk-tile order: left, captain front, FO front, right. Independent of

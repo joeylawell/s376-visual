@@ -294,6 +294,8 @@ void test_config() {
         CHECK(four.channels.size() == 4);
         auto wrap_dup = s376::wrap_channels(four.channels);
         CHECK(wrap_dup.size() == 3); // FO front shares heading 0 with captain front
+        auto strip4 = s376::strip4_channels(four.channels);
+        CHECK(strip4.size() == 4);
         four.channels[2].heading_offset_deg = 25.0;
         auto wrap4 = s376::wrap_channels(four.channels);
         CHECK(wrap4.size() == 4);

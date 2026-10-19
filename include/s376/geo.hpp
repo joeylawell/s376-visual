@@ -1,5 +1,9 @@
 #pragma once
 
+#include <string>
+#include <utility>
+#include <vector>
+
 namespace s376::geo {
 
 constexpr double kPi = 3.14159265358979323846;
@@ -116,6 +120,14 @@ ProjectedPoint project_lla(const ChannelView& v, double lat_deg, double lon_deg,
 
 // 0 = ocean, 1 = land. Soft edges so coasts are not stair-step texels.
 // Public geography only (coarse continents + a few US coastal cutouts).
+// Optional OSM/NOAA water rings (shoreline.bin) punch Jamaica Bay etc.
 float land_coverage(double lat_deg, double lon_deg);
+
+// Compact OSM `natural=water` rings. Not committed; cache/KJFK only.
+bool write_shoreline_bin(const std::vector<std::vector<std::pair<double, double>>>& water_rings,
+                         const std::string& path);
+bool load_shoreline_bin(const std::string& path);
+void clear_shoreline_overlay();
+int shoreline_ring_count();
 
 } // namespace s376::geo

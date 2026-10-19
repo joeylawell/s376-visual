@@ -211,13 +211,18 @@ void add_kjfk_public_scenery(Airport& a) {
     add_named_connectors(a, a.runways[2], kU, 3, 80.0, 200.0);
     a.tower_lat = 40.6407;
     a.tower_lon = -73.7789;
-    a.tower_h_m = 68.f;
+    a.tower_h_m = kKjfkAtctHeightM; // PANYNJ / FAA 321 ft ATCT
     a.has_beacon = true;
     add_tower_building(a);
     add_stand(a, "T4-1", 40.6440, -73.7772, 40.0);
     add_stand(a, "T4-2", 40.6448, -73.7786, 40.0);
+    add_stand(a, "T4-3", 40.6454, -73.7798, 40.0);
     add_stand(a, "T5-1", 40.6406, -73.7862, 121.0);
+    add_stand(a, "T5-2", 40.6414, -73.7878, 121.0);
+    add_stand(a, "T1-1", 40.6434, -73.7916, 121.0);
+    add_stand(a, "T7-1", 40.6484, -73.7824, 40.0);
     add_stand(a, "T8-1", 40.6464, -73.7888, 121.0);
+    add_stand(a, "T8-2", 40.6472, -73.7900, 121.0);
     plant_trees(a);
     fill_night_layer(a);
     add_shared_routes(a);
@@ -315,7 +320,7 @@ void add_street_lights(Airport& a) {
         clat /= static_cast<double>(ap.ring.size());
         clon /= static_cast<double>(ap.ring.size());
         if (geo::land_coverage(clat, clon) >= kLandMin && !near_runway(a, clat, clon, 15.0)) {
-            push(clat, clon, a.elev_m + 12.0, 1.f, 0.92f, 0.78f);
+            push(clat, clon, a.elev_m + 18.0, 1.f, 0.94f, 0.82f); // metal-halide flood
             ++n;
         }
         const std::size_t ring_step = std::max<std::size_t>(1, ap.ring.size() / 4);
@@ -328,6 +333,19 @@ void add_street_lights(Airport& a) {
             push(p.first, p.second, a.elev_m + 12.0, 1.f, 0.92f, 0.78f);
             ++n;
         }
+    }
+    for (const auto& b : a.buildings) {
+        if (n >= kMaxNightLamps)
+            break;
+        if (b.kind != BuildingKind::Airport)
+            continue;
+        double lat = 0, lon = 0;
+        building_centroid(b, lat, lon);
+        if (geo::land_coverage(lat, lon) < kLandMin)
+            continue;
+        const double z = a.elev_m + std::max(8.0, static_cast<double>(b.height_m) + 2.0);
+        push(lat, lon, z, 1.f, 0.94f, 0.80f);
+        ++n;
     }
     a.night.spacing_m = 35;
     a.night.points = n;

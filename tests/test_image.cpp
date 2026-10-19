@@ -137,7 +137,10 @@ void test_image() {
         bool water = false;
         s376::kjfk_subset_land_rgb(40.620, -73.774, r, g, b, water);
         CHECK(water);
-        CHECK(b > r && b > g);
+        CHECK(g > r && g > b); // Jamaica Bay olive, not navy
+        s376::kjfk_subset_land_rgb(40.500, -73.800, r, g, b, water);
+        CHECK(water);
+        CHECK(b > r && b > g); // Atlantic stays blue
         s376::kjfk_subset_land_rgb(40.640, -73.779, r, g, b, water);
         CHECK(!water);
         s376::kjfk_subset_land_rgb(40.72, -74.00, r, g, b, water);

@@ -44,11 +44,12 @@ void usage() {
            "usage: s376-visual [options]\n"
            "  -c, --config PATH     TOML config (default config/s376-visual.toml if present)\n"
            "  --bind HOST:PORT      override host.bind (default 0.0.0.0:2300)\n"
-           "  --channel NAME        far_left|mid_left|mid_right|far_right|all\n"
+           "  --channel NAME        far_left|mid_left|mid_right|far_right|all|strip|wrap\n"
            "                        aliases: left|front|right|front_fo\n"
            "                        (default: all enabled, or $S376_CHANNEL)\n"
-           "                        --channel all --record/--screenshot writes a\n"
-           "                        Left|Front|Right strip at each channel's WxH\n"
+           "                        --channel all|strip --record/--screenshot writes a\n"
+           "                        4-channel 50°×32.5° strip (far_left|mid_left|mid_right|far_right)\n"
+           "                        --channel wrap: unique Left|Front|Right (drops FO front)\n"
            "  --cache-dir PATH      packed DEM/imagery from s376-cache\n"
            "  --headless            run the host receiver with no GL window\n"
            "  --demo [kjfk]         bare --demo: in-process synth to 127.0.0.1 (CI)\n"
@@ -576,12 +577,17 @@ int main(int argc, char** argv) {
     if (!self_test_shot.empty())
         std::filesystem::create_directories(self_test_shot);
 
-    auto channels = s376::select_channels(cfg, channel_name);
+    auto channels = s376::select_channels(cfg, channel_name == "strip" || channel_name == "wrap"
+                                                   ? "all"
+                                                   : channel_name);
     const bool capture_mode = !screenshot_path.empty() || !record_path.empty();
-    if (capture_mode && channel_name == "all") {
-        auto wrap = s376::wrap_channels(s376::select_channels(cfg, "all"));
-        if (wrap.size() >= 2) {
-            channels = std::move(wrap);
+    if (capture_mode &&
+        (channel_name == "all" || channel_name == "strip" || channel_name == "wrap")) {
+        const bool unique = channel_name == "wrap";
+        auto strip = unique ? s376::wrap_channels(s376::select_channels(cfg, "all"))
+                            : s376::strip4_channels(s376::select_channels(cfg, "all"));
+        if (strip.size() >= 2) {
+            channels = std::move(strip);
             int x = 0;
             for (auto& ch : channels) {
                 ch.window_x = x;
@@ -590,7 +596,9 @@ int main(int argc, char** argv) {
             }
             int sw = 0, sh = 0;
             s376::wrap_strip_size(channels, sw, sh);
-            S376_LOG_INFO("ig", "strip Left|Front|Right  %zu ch  %dx%d", channels.size(), sw, sh);
+            S376_LOG_INFO("ig", "strip %s  %zu ch  %dx%d",
+                          unique ? "Left|Front|Right" : "L|C|Cfo|R 50x32.5", channels.size(), sw,
+                          sh);
         }
     }
     if (channels.empty()) {

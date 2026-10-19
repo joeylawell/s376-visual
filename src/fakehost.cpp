@@ -258,14 +258,22 @@ ApproachProfile::ApproachProfile(ProfileConfig c) : c_(std::move(c)) {
     pitch_ = 5.5 * std::pow(vapp / v_, 2) - c_.gs_deg;
 }
 
+void place_b737300_eye(double gear_lat, double gear_lon, double field_elev_ft, double wheel_agl_ft,
+                       double hdg_deg, double pitch_deg, double& eye_lat, double& eye_lon,
+                       double& eye_alt_ft) {
+    const double pitch_rad = geo::deg2rad(pitch_deg);
+    const double fwd_m = kB737300EyeFwdOfMainM * std::cos(pitch_rad);
+    const double up_m = kB737300EyeFwdOfMainM * std::sin(pitch_rad);
+    geo::direct_wgs84(gear_lat, gear_lon, hdg_deg, fwd_m, eye_lat, eye_lon);
+    eye_alt_ft = field_elev_ft + wheel_agl_ft + kEyeHeightFt + up_m * geo::kMToFt;
+}
+
 void ApproachProfile::place(Frame& f) const {
     const auto& r = c_.rwy;
     const double b = geo::deg2rad(r.brg_true);
     double lat = r.thr_lat, lon = r.thr_lon;
     offset_ft(lat, lon, x_ * std::cos(b) - y_ * std::sin(b), x_ * std::sin(b) + y_ * std::cos(b));
-    f.lat = lat;
-    f.lon = lon;
-    f.alt_ft = r.elev_ft + h_ + kEyeHeightFt;
+    place_b737300_eye(lat, lon, r.elev_ft, h_, r.brg_true, pitch_, f.lat, f.lon, f.alt_ft);
     f.hdg = r.brg_true;
 }
 
@@ -590,9 +598,8 @@ Frame ManualFlight::step(double dt, const Controls& c) {
     t_ += dt;
     Frame f;
     f.t = t_;
-    f.lat = lat_;
-    f.lon = lon_;
-    f.alt_ft = alt_ + kEyeHeightFt;
+    place_b737300_eye(lat_, lon_, rwy_.elev_ft, alt_ - rwy_.elev_ft, hdg_, pitch_, f.lat, f.lon,
+                      f.alt_ft);
     f.hdg = hdg_;
     f.pitch = pitch_;
     f.roll = roll_;

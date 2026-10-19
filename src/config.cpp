@@ -651,6 +651,25 @@ std::vector<ChannelConfig> wrap_channels(const std::vector<ChannelConfig>& chann
     return out;
 }
 
+std::vector<ChannelConfig> strip4_channels(const std::vector<ChannelConfig>& channels) {
+    // Same left-to-right sort as wrap_channels, but keep the FO front
+    // duplicate so a 4-channel 50°×32.5° strip matches the projectors.
+    std::vector<ChannelConfig> enabled;
+    for (const auto& ch : channels) {
+        if (!ch.enabled)
+            continue;
+        if (ch.role == "host_io" || ch.name == "ios")
+            continue;
+        enabled.push_back(ch);
+    }
+    std::sort(enabled.begin(), enabled.end(), [](const ChannelConfig& a, const ChannelConfig& b) {
+        if (std::fabs(a.heading_offset_deg - b.heading_offset_deg) > 0.05)
+            return a.heading_offset_deg < b.heading_offset_deg;
+        return channel_tile_order(a) < channel_tile_order(b);
+    });
+    return enabled;
+}
+
 void wrap_strip_size(const std::vector<ChannelConfig>& channels, int& w, int& h) {
     w = 0;
     h = 0;
