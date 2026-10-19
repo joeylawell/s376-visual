@@ -88,11 +88,128 @@ Ecef sun_from_elev_az(double lat_deg, double lon_deg, double elev_deg, double az
     return dir;
 }
 
+double julian_date(int year, int month, int day, double hours_utc) {
+    int y = year;
+    int m = month;
+    if (m <= 2) {
+        y -= 1;
+        m += 12;
+    }
+    const int A = y / 100;
+    const int B = 2 - A + A / 4;
+    return std::floor(365.25 * (y + 4716)) + std::floor(30.6001 * (m + 1)) + day + B - 1524.5 +
+           hours_utc / 24.0;
+}
+
+double civil_utc_offset_hours(double lon_deg, int year, int month, int day) {
+    // US Eastern when the eye is around NYC / the east coast.
+    if (lon_deg > -85.0 && lon_deg < -66.0) {
+        auto weekday = [](int y, int m, int d) {
+            // Sakamoto: 0 = Sunday.
+            static const int t[] = {0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4};
+            if (m < 3)
+                y -= 1;
+            return (y + y / 4 - y / 100 + y / 400 + t[m - 1] + d) % 7;
+        };
+        auto nth_sunday = [&](int y, int m, int n) {
+            int d = 1;
+            while (weekday(y, m, d) != 0)
+                ++d;
+            return d + 7 * (n - 1);
+        };
+        const int dst_start = nth_sunday(year, 3, 2); // 2nd Sunday March
+        const int dst_end = nth_sunday(year, 11, 1);  // 1st Sunday November
+        bool dst = false;
+        if (month > 3 && month < 11)
+            dst = true;
+        else if (month == 3 && day >= dst_start)
+            dst = true;
+        else if (month == 11 && day < dst_end)
+            dst = true;
+        return dst ? -4.0 : -5.0;
+    }
+    return std::round(lon_deg / 15.0);
+}
+
+namespace {
+
+void solar_elev_az(double lat_deg, double lon_deg, double utc_hours, int month, int day, int year,
+                   double& elev_deg, double& az_deg) {
+    const int y = year <= 0 ? 2000 : year;
+    const int mo = month <= 0 ? 6 : month;
+    const int da = day <= 0 ? 21 : day;
+    const double jd = julian_date(y, mo, da, utc_hours);
+    const double n = jd - 2451545.0;
+    const double L = wrap360(280.460 + 0.9856474 * n);
+    const double g = deg2rad(wrap360(357.528 + 0.9856003 * n));
+    const double lambda = deg2rad(wrap360(L + 1.915 * std::sin(g) + 0.020 * std::sin(2.0 * g)));
+    const double eps = deg2rad(23.439 - 0.0000004 * n);
+    const double ra = rad2deg(std::atan2(std::cos(eps) * std::sin(lambda), std::cos(lambda)));
+    const double dec = std::asin(std::sin(eps) * std::sin(lambda));
+    const double gmst = wrap360(15.0 * (18.697374558 + 24.06570982441908 * n));
+    const double lst = wrap360(gmst + lon_deg);
+    const double ha = deg2rad(wrap180(lst - ra));
+    const double lat = deg2rad(lat_deg);
+    const double sin_el =
+        std::sin(lat) * std::sin(dec) + std::cos(lat) * std::cos(dec) * std::cos(ha);
+    const double el = std::asin(std::max(-1.0, std::min(1.0, sin_el)));
+    double az = 0;
+    const double cos_el = std::cos(el);
+    if (std::fabs(cos_el) > 1e-6) {
+        const double cos_az =
+            (std::sin(dec) - std::sin(el) * std::sin(lat)) / (cos_el * std::cos(lat));
+        az = std::acos(std::max(-1.0, std::min(1.0, cos_az)));
+        if (ha > 0)
+            az = 2.0 * kPi - az;
+    }
+    elev_deg = rad2deg(el);
+    az_deg = rad2deg(az);
+}
+
+void lunar_elev_az(double lat_deg, double lon_deg, double utc_hours, int month, int day, int year,
+                   double& elev_deg, double& az_deg) {
+    const int y = year <= 0 ? 2000 : year;
+    const int mo = month <= 0 ? 6 : month;
+    const int da = day <= 0 ? 21 : day;
+    const double jd = julian_date(y, mo, da, utc_hours);
+    const double d = jd - 2451545.0;
+    const double L = wrap360(218.316 + 13.176396 * d);
+    const double M = deg2rad(wrap360(134.963 + 13.064993 * d));
+    const double F = deg2rad(wrap360(93.272 + 13.229350 * d));
+    const double lon_ecl = deg2rad(wrap360(L + 6.289 * std::sin(M)));
+    const double lat_ecl = deg2rad(5.128 * std::sin(F));
+    const double eps = deg2rad(23.439 - 0.0000004 * d);
+    const double dec = std::asin(std::sin(eps) * std::cos(lat_ecl) * std::sin(lon_ecl) +
+                                 std::cos(eps) * std::sin(lat_ecl));
+    const double ra = rad2deg(std::atan2(
+        std::cos(eps) * std::sin(lon_ecl) - std::tan(lat_ecl) * std::sin(eps), std::cos(lon_ecl)));
+    const double gmst = wrap360(15.0 * (18.697374558 + 24.06570982441908 * d));
+    const double lst = wrap360(gmst + lon_deg);
+    const double ha = deg2rad(wrap180(lst - ra));
+    const double lat = deg2rad(lat_deg);
+    const double sin_el =
+        std::sin(lat) * std::sin(dec) + std::cos(lat) * std::cos(dec) * std::cos(ha);
+    const double el = std::asin(std::max(-1.0, std::min(1.0, sin_el)));
+    double az = 0;
+    const double cos_el = std::cos(el);
+    if (std::fabs(cos_el) > 1e-6) {
+        const double cos_az =
+            (std::sin(dec) - std::sin(el) * std::sin(lat)) / (cos_el * std::cos(lat));
+        az = std::acos(std::max(-1.0, std::min(1.0, cos_az)));
+        if (ha > 0)
+            az = 2.0 * kPi - az;
+    }
+    elev_deg = rad2deg(el);
+    az_deg = rad2deg(az);
+}
+
+} // namespace
+
 Ecef sun_ecef(double lat_deg, double lon_deg, double tod_hours, int month, int day,
               double* elev_deg_out) {
+    // Legacy: host TOD treated as UTC, year unused (kept for existing tests).
     const int doy = day_of_year(2000, month <= 0 ? 6 : month, day <= 0 ? 21 : day);
     const double decl = deg2rad(23.44 * std::sin(2.0 * kPi * (doy - 81) / 365.0));
-    // Approximate solar time: UTC hours + longitude/15. Host TOD is treated as UTC.
     const double hour_angle = deg2rad(15.0 * (tod_hours - 12.0) + lon_deg);
     const double lat = deg2rad(lat_deg);
     const double sin_el =
@@ -107,9 +224,34 @@ Ecef sun_ecef(double lat_deg, double lon_deg, double tod_hours, int month, int d
             (std::sin(decl) - std::sin(el) * std::sin(lat)) / (cos_el * std::cos(lat));
         az = std::acos(std::max(-1.0, std::min(1.0, cos_az)));
         if (hour_angle > 0)
-            az = 2.0 * kPi - az; // afternoon: west
+            az = 2.0 * kPi - az;
     }
     return sun_from_elev_az(lat_deg, lon_deg, rad2deg(el), rad2deg(az));
+}
+
+Ecef sun_ecef_civil(double lat_deg, double lon_deg, double local_hours, int month, int day, int year,
+                    double* elev_deg_out) {
+    const double utc = local_hours - civil_utc_offset_hours(lon_deg, year, month, day);
+    double el = 0, az = 0;
+    solar_elev_az(lat_deg, lon_deg, utc, month, day, year, el, az);
+    if (elev_deg_out)
+        *elev_deg_out = el;
+    return sun_from_elev_az(lat_deg, lon_deg, el, az);
+}
+
+Ecef moon_ecef(double lat_deg, double lon_deg, double utc_hours, int month, int day, int year,
+               double* elev_deg_out) {
+    double el = 0, az = 0;
+    lunar_elev_az(lat_deg, lon_deg, utc_hours, month, day, year, el, az);
+    if (elev_deg_out)
+        *elev_deg_out = el;
+    return sun_from_elev_az(lat_deg, lon_deg, el, az);
+}
+
+Ecef moon_ecef_civil(double lat_deg, double lon_deg, double local_hours, int month, int day,
+                     int year, double* elev_deg_out) {
+    const double utc = local_hours - civil_utc_offset_hours(lon_deg, year, month, day);
+    return moon_ecef(lat_deg, lon_deg, utc, month, day, year, elev_deg_out);
 }
 
 ChannelView make_channel_view(double lat_deg, double lon_deg, double alt_m, double true_hdg_deg,

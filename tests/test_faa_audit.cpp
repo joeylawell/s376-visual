@@ -632,6 +632,9 @@ void test_faa_audit() {
         CHECK_NEAR(s376::kAimingPointInnerFt, 72.0, 0.1);
         CHECK_NEAR(s376::kCenterlineWidthIn, 36.0, 0.1);
         CHECK_NEAR(s376::kDisplacedThresholdBarFt, 10.0, 0.1);
+        CHECK_NEAR(s376::kThresholdStripeStartFt, 20.0, 0.1);
+        CHECK(s376::marking_ident("04R") == "4R");
+        CHECK(s376::marking_ident("13L") == "13L");
         CHECK(s376::kTdzBarCounts[0] == 3 && s376::kTdzBarCounts[1] == 2 &&
               s376::kTdzBarCounts[2] == 2 && s376::kTdzBarCounts[3] == 1 &&
               s376::kTdzBarCounts[4] == 1);

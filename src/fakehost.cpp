@@ -653,7 +653,7 @@ IosCommand parse_ios_query(const std::string& target) {
         else if (k == "arg") c.arg = dec;
     }
     static const char* ok[] = {"reposition", "freeze", "unfreeze", "tod", "vis", "wind",
-                               "ceiling", "rvr", "quit", nullptr};
+                               "ceiling", "rvr", "lead-in", "quit", nullptr};
     bool known = false;
     for (int i = 0; ok[i]; ++i)
         known |= c.op == ok[i];
@@ -679,7 +679,9 @@ std::string ios_page() {
 Vis sm <input id=vis size=4 value=10><button onclick="c('vis',v('vis'))">set</button>
 Wind dir/mph <input id=wind size=6 value=040/10><button onclick="c('wind',v('wind'))">set</button>
 Ceiling ft MSL <input id=ceil size=5 value=-1><button onclick="c('ceiling',v('ceil'))">set</button>
-RVR ft <input id=rvr size=5 value=-1><button onclick="c('rvr',v('rvr'))">set</button></div>
+RVR ft <input id=rvr size=5 value=-1><button onclick="c('rvr',v('rvr'))">set</button>
+13L lead-in <button onclick="c('lead-in','0')">off (ILS)</button>
+<button onclick="c('lead-in','5')">on</button></div>
 <div id=st></div>
 <script>function v(i){return document.getElementById(i).value}
 function c(op,arg){fetch('/cmd?op='+op+'&arg='+encodeURIComponent(arg)).then(r=>r.text()).then(t=>st.textContent=t)}
@@ -816,6 +818,7 @@ std::vector<std::uint8_t> build_frame_datagram(const Frame& f, unsigned count,
         pk.push_back(xt4::build_display(true));
         for (int sw = 1; sw <= 4; ++sw) // same switch numbers as s376-synth
             pk.push_back(xt4::build_light_switch(sw, env.light_step));
+        pk.push_back(xt4::build_light_switch(70, env.lead_in_step)); // 13L RLLS lead-in
     }
     return xt4::build_datagram(pk, wo);
 }

@@ -7,6 +7,7 @@
 #include "s376/terrain.hpp"
 #include "s376/geo.hpp"
 #include "s376/host.hpp"
+#include "s376/landmarks.hpp"
 #include "s376/render.hpp"
 #include "s376/safety.hpp"
 #include "s376/version.hpp"
@@ -176,6 +177,55 @@ std::string format_approach_bench(const std::vector<ApproachBenchSample>& rows, 
     }
     if (!dropped.empty())
         o << "dropped\t" << dropped << "\n";
+    return o.str();
+}
+
+std::string format_pilot_view_bearings(const Airport& apt, const ShotPose& pose) {
+    std::ostringstream o;
+    o << std::fixed << std::setprecision(2);
+    o << "# eyepoint bearings relative to runway heading (+ right, left_m > 0 is left)\n";
+    o << "eye " << apt.icao << ":" << pose.rwy << " " << pose.dist_nm << "nm  "
+      << pose.lat << "," << pose.lon << "  " << pose.alt_ft << "ft  hdg " << pose.hdg_true_deg
+      << "\n";
+    const double eye_alt_m = pose.alt_ft * geo::kFtToM;
+    auto line = [&](const char* name, const RelObserve& ob) {
+        o << "  " << name << "\trel=" << ob.rel_deg << " deg  left=" << ob.left_m
+          << " m  dist=" << ob.dist_m << " m  elev=" << ob.elev_ang_deg << " deg\n";
+    };
+    if (apt.tower_h_m > 1.f) {
+        line("ATCT", observe_from_eye(pose.lat, pose.lon, eye_alt_m, pose.hdg_true_deg, apt.tower_lat,
+                                      apt.tower_lon, apt.elev_m + apt.tower_h_m));
+    }
+    for (const auto& b : apt.buildings) {
+        if (b.name.size() < 2 || (b.name[0] != 'T' && b.name != "hangar" && b.name != "cargo"))
+            continue;
+        if (b.ring.empty())
+            continue;
+        double lat = 0, lon = 0;
+        for (const auto& p : b.ring) {
+            lat += p.first;
+            lon += p.second;
+        }
+        lat /= static_cast<double>(b.ring.size());
+        lon /= static_cast<double>(b.ring.size());
+        line(b.name.c_str(), observe_from_eye(pose.lat, pose.lon, eye_alt_m, pose.hdg_true_deg, lat,
+                                              lon, apt.elev_m + b.height_m));
+    }
+    const char* ids[] = {"cpt", "empire", "onewtc", nullptr};
+    for (int i = 0; ids[i]; ++i) {
+        const Landmark* lm = find_landmark(ids[i]);
+        if (!lm)
+            continue;
+        const double tip = lm->tip_m > 1.f ? lm->tip_m : lm->height_m;
+        line(lm->name, observe_from_eye(pose.lat, pose.lon, eye_alt_m, pose.hdg_true_deg, lm->lat,
+                                        lm->lon, tip));
+    }
+    for (const auto& m : apt.approach_marks) {
+        if (m.rwy != pose.rwy)
+            continue;
+        line(m.name.c_str(), observe_from_eye(pose.lat, pose.lon, eye_alt_m, pose.hdg_true_deg, m.lat,
+                                              m.lon, apt.elev_m));
+    }
     return o.str();
 }
 

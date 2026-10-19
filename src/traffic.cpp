@@ -261,6 +261,9 @@ void add_public_ny_roads(Airport& a) {
                    {40.6408, -73.8040},
                    {40.6435, -73.8180},
                    {40.6488, -73.8320}});
+        // 13L 1.18 nm: Belt over the approach (checklist ground track).
+        push_road(a, "Belt Parkway 13L", RoadClass::Trunk,
+                  {{40.6698, -73.8168}, {40.666531, -73.809667}, {40.6632, -73.8024}});
         push_road(a, "JFK Terminal", RoadClass::Secondary,
                   {{40.6458, -73.7752},
                    {40.6470, -73.7795},

@@ -74,6 +74,17 @@ Ecef sun_from_elev_az(double lat_deg, double lon_deg, double elev_deg, double az
 Ecef sun_ecef(double lat_deg, double lon_deg, double tod_hours, int month, int day,
               double* elev_deg_out = nullptr);
 
+// Civil-time sun/moon. `local_hours` is local clock (KJFK Oct = EDT = UTC−4).
+// Year is used. US Eastern DST when lon is in (−85, −66).
+Ecef sun_ecef_civil(double lat_deg, double lon_deg, double local_hours, int month, int day,
+                    int year, double* elev_deg_out = nullptr);
+Ecef moon_ecef(double lat_deg, double lon_deg, double utc_hours, int month, int day, int year,
+               double* elev_deg_out = nullptr);
+Ecef moon_ecef_civil(double lat_deg, double lon_deg, double local_hours, int month, int day,
+                     int year, double* elev_deg_out = nullptr);
+double civil_utc_offset_hours(double lon_deg, int year, int month, int day);
+double julian_date(int year, int month, int day, double hours_utc);
+
 int day_of_year(int year, int month, int day);
 
 // Shared-eyepoint channel view: the same geodetic eye, camera rotated by the

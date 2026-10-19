@@ -368,6 +368,27 @@ static void test_ios() {
     }
     cl.join();
     CHECK(got.size() == 1 && got[0].op == "tod" && got[0].arg == "19.5");
+    CHECK(fh::parse_ios_query("/cmd?op=lead-in&arg=5").op == "lead-in");
+    CHECK(fh::parse_ios_query("/cmd?op=lead-in&arg=5").arg == "5");
+    fh::Environment env;
+    CHECK(env.lead_in_step == 0);
+    env.lead_in_step = 5;
+    fh::Frame f;
+    auto dg = fh::build_frame_datagram(f, 1, env, s376::xt4::WordOrder::Le, s376::xt4::FloatFmt::Ieee);
+    s376::xt4::Decoder dec;
+    auto parsed = dec.parse(dg.data(), dg.size());
+    CHECK(parsed.has_value());
+    bool saw70 = false;
+    for (const auto& pk : parsed->packets) {
+        if (pk.type != s376::xt4::kTypeLightSwitch)
+            continue;
+        const auto sw = s376::xt4::decode_light_switch(pk);
+        if (sw.switch_num == 70) {
+            CHECK(sw.step == 5);
+            saw70 = true;
+        }
+    }
+    CHECK(saw70);
 }
 
 // Fly the 04R profile through the renderer's own HostReceiver (in-process,

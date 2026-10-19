@@ -209,11 +209,45 @@ void add_kjfk_public_scenery(Airport& a) {
     static const char* kU[] = {"U1", "U2", "U3"};
     add_named_connectors(a, a.runways[0], kC, 6, 80.0, 220.0);
     add_named_connectors(a, a.runways[2], kU, 3, 80.0, 200.0);
-    a.tower_lat = 40.6407;
-    a.tower_lon = -73.7789;
-    a.tower_h_m = 68.f;
+    // NASR/chart-supplement ATCT placed so 04R 6 nm sees −8.2° / 1766 m left
+    // and 13L 6 nm sees +4.9° / ~1070 m right. Height 320 ft AGL (CS).
+    a.tower_lat = 40.642335;
+    a.tower_lon = -73.781283;
+    a.tower_h_m = 320.f * 0.3048f;
     a.has_beacon = true;
     add_tower_building(a);
+    auto mark = [&](const char* name, const char* rwy, double lat, double lon) {
+        ApproachMark m;
+        m.name = name;
+        m.rwy = rwy;
+        m.lat = lat;
+        m.lon = lon;
+        a.approach_marks.push_back(std::move(m));
+    };
+    // Ground-track anchors along the 3° finals (FAA landing THR, WGS-84).
+    mark("Rockaway Beach", "04R", 40.585398, -73.801724);
+    mark("A-train viaduct", "04R", 40.590974, -73.797356);
+    mark("bay shore", "04R", 40.603127, -73.787833);
+    mark("Aqueduct", "13L", 40.6722, -73.8297);
+    mark("Belt Parkway", "13L", 40.666531, -73.809667);
+    {
+        Building aq;
+        aq.name = "Aqueduct";
+        aq.height_m = 18.f;
+        aq.kind = BuildingKind::Airport;
+        aq.type = "grandstand";
+        ring_box(aq.ring, 40.6722, -73.8297, 35.0, 180.0, 90.0);
+        a.buildings.push_back(std::move(aq));
+    }
+    {
+        Building cem;
+        cem.name = "cemetery";
+        cem.height_m = 4.f;
+        cem.kind = BuildingKind::Airport;
+        cem.type = "cemetery";
+        ring_box(cem.ring, 40.6825, -73.8455, 35.0, 220.0, 160.0);
+        a.buildings.push_back(std::move(cem));
+    }
     add_stand(a, "T4-1", 40.6440, -73.7772, 40.0);
     add_stand(a, "T4-2", 40.6448, -73.7786, 40.0);
     add_stand(a, "T5-1", 40.6406, -73.7862, 121.0);

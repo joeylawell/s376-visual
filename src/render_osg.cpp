@@ -140,6 +140,7 @@ uniform sampler2D sDetail;
 uniform sampler2D sShadow;
 uniform sampler2D sShadowFar;
 uniform vec3 uSunDir;
+uniform vec3 uMoonDir;
 uniform vec3 uAmbient;
 uniform vec3 uDiffuse;
 uniform vec3 uFogColor;
@@ -327,6 +328,7 @@ void main() {
 const char* kLitColorFS = R"(
 #version 120
 uniform vec3 uSunDir;
+uniform vec3 uMoonDir;
 uniform vec3 uAmbient;
 uniform vec3 uDiffuse;
 uniform vec3 uFogColor;
@@ -508,6 +510,7 @@ void main() {
 const char* kLandmarkFS = R"(
 #version 120
 uniform vec3 uSunDir;
+uniform vec3 uMoonDir;
 uniform vec3 uAmbient;
 uniform vec3 uDiffuse;
 uniform vec3 uFogColor;
@@ -581,6 +584,7 @@ const char* kUnlitColorFS = R"(
 #version 120
 uniform vec3 uFogColor;
 uniform vec3 uSunDir;
+uniform vec3 uMoonDir;
 uniform vec3 uDiffuse;
 uniform float uFogDensity;
 uniform float uHaze;
@@ -679,6 +683,7 @@ void main() {
 const char* kSkyFS = R"(
 #version 120
 uniform vec3 uSunDir;
+uniform vec3 uMoonDir;
 uniform vec3 uUp;
 uniform vec3 uFwd;
 uniform vec3 uRight;
@@ -748,7 +753,8 @@ void main() {
     vec3 sky = mix(simple, pbr, clamp(uAtmosphere, 0.0, 1.0));
     // 0 at +6° sun, 1 by −8° — 3 AM is navy, not a leftover dusk glow.
     float night = smoothstep(0.10, -0.14, sunH);
-    vec3 moon = normalize(-sun + 0.15 * up);
+    vec3 moon = (dot(uMoonDir, uMoonDir) > 0.05) ? normalize(uMoonDir)
+                                                 : normalize(-sun + 0.15 * up);
     float mm = max(dot(d, moon), 0.0);
     vec3 nightcol = vec3(0.003, 0.006, 0.018);
     nightcol += vec3(0.55, 0.60, 0.72) * pow(mm, 80.0) * 0.55;
@@ -1019,6 +1025,7 @@ void attach_points(osg::StateSet* ss, float size) {
 
 struct ShaderEnv {
     osg::ref_ptr<osg::Uniform> sun_dir;
+    osg::ref_ptr<osg::Uniform> moon_dir;
     osg::ref_ptr<osg::Uniform> ambient;
     osg::ref_ptr<osg::Uniform> diffuse;
     osg::ref_ptr<osg::Uniform> fog_color;
@@ -1062,6 +1069,7 @@ void no_shadow(osg::Node* n) {
 
 void attach_env_uniforms(osg::StateSet* ss, ShaderEnv& env) {
     env.sun_dir = new osg::Uniform("uSunDir", osg::Vec3(1.f, 0.f, 0.f));
+    env.moon_dir = new osg::Uniform("uMoonDir", osg::Vec3(0.f, 0.f, 0.f));
     env.ambient = new osg::Uniform("uAmbient", osg::Vec3(0.15f, 0.15f, 0.18f));
     env.diffuse = new osg::Uniform("uDiffuse", osg::Vec3(1.f, 0.95f, 0.85f));
     env.fog_color = new osg::Uniform("uFogColor", osg::Vec3(0.62f, 0.70f, 0.78f));
@@ -1101,6 +1109,7 @@ void attach_env_uniforms(osg::StateSet* ss, ShaderEnv& env) {
     env.viewport = new osg::Uniform("uViewport", osg::Vec2(1920.f, 1200.f));
     env.city_dir = new osg::Uniform("uCityDir", osg::Vec3(0.f, 0.f, 0.f));
     ss->addUniform(env.sun_dir);
+    ss->addUniform(env.moon_dir);
     ss->addUniform(env.ambient);
     ss->addUniform(env.diffuse);
     ss->addUniform(env.fog_color);
@@ -3843,14 +3852,15 @@ class OsgRenderer final : public Renderer {
         const float tod = host.have_env ? effective_tod_hours(host.env.tod_hours, host.env.tod_select)
                                         : 14.5f;
         const int tod_sel = host.have_env ? host.env.tod_select : -1;
-        const int month = host.have_env ? host.env.month : 6;
-        const int day = host.have_env ? host.env.day : 21;
+        const int month = host.have_env ? host.env.month : 10;
+        const int day = host.have_env ? host.env.day : 25;
+        const int year = host.have_env ? host.env.year : 2026;
         const double lat = host.have_eyepoint ? host.eye.lat_deg : 47.46;
         const double lon = host.have_eyepoint ? host.eye.lon_deg : -122.31;
         double el = 0;
         geo::Ecef s;
         if (cfg_.render.solar_astronomy) {
-            s = geo::sun_ecef(lat, lon, tod, month, day, &el);
+            s = geo::sun_ecef_civil(lat, lon, tod, month, day, year, &el);
         } else {
             el = visual_sun_elev_deg(host.have_env ? host.env.tod_hours : 14.5f, tod_sel);
             const double az = visual_sun_az_deg(host.have_env ? host.env.tod_hours : 14.5f, tod_sel,
@@ -3860,6 +3870,14 @@ class OsgRenderer final : public Renderer {
         if (env_u_.sun_dir)
             env_u_.sun_dir->set(osg::Vec3(static_cast<float>(s.x), static_cast<float>(s.y),
                                           static_cast<float>(s.z)));
+        {
+            double mel = 0;
+            const geo::Ecef m = geo::moon_ecef_civil(lat, lon, tod, month, day, year, &mel);
+            (void)mel;
+            if (env_u_.moon_dir)
+                env_u_.moon_dir->set(osg::Vec3(static_cast<float>(m.x), static_cast<float>(m.y),
+                                               static_cast<float>(m.z)));
+        }
         {
             geo::Ecef ee, nn, uu;
             geo::ecef_to_enu_axes(lat, lon, ee, nn, uu);

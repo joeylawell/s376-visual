@@ -156,7 +156,7 @@ void add_faa_markings(AirportMesh& mesh, const Runway& rw) {
                   std::min(d + 36.0, rw.length_m - 8), -cl_h, cl_h, 0.96f, 0.96f, 0.94f);
 
     auto one_end = [&](double lat, double lon, double hdg, const std::string& ident,
-                       double disp_ft) {
+                       double disp_ft, bool emas) {
         const double disp_m = disp_ft * geo::kFtToM;
         if (disp_m > 8.0) {
             // AC 150/5340-1M 2.9: white arrows in the displaced area, not
@@ -175,11 +175,17 @@ void add_faa_markings(AirportMesh& mesh, const Runway& rw) {
             const double bar = kDisplacedThresholdBarFt * geo::kFtToM;
             mark_rect(mesh, lat, lon, hdg, elev, 0.0, bar, -(half - 0.3), half - 0.3, 0.97f, 0.97f,
                       0.95f);
+        } else if (emas) {
+            // 04R/22L: white threshold bar so the EMAS bed in front of the
+            // landing THR reads as the start of usable pavement.
+            const double bar = kDisplacedThresholdBarFt * geo::kFtToM;
+            mark_rect(mesh, lat, lon, hdg, elev, 0.0, bar, -(half - 0.3), half - 0.3, 0.97f, 0.97f,
+                      0.95f);
         }
         // Threshold stripes: 16 on a 200 ft runway, 12 on 150 ft (Table 2-1).
         const int nb = threshold_stripe_count(rw.width_m);
         const double bar_w = 5.75 * geo::kFtToM;
-        const double stripe0 = (disp_m > 8.0 ? kDisplacedThresholdBarFt * geo::kFtToM : 0.0) + 1.0;
+        const double stripe0 = kThresholdStripeStartFt * geo::kFtToM;
         const double stripe1 = stripe0 + 150.0 * geo::kFtToM;
         const double span = half - 2.0;
         for (int i = 0; i < nb; ++i) {
@@ -190,8 +196,8 @@ void add_faa_markings(AirportMesh& mesh, const Runway& rw) {
             mark_rect(mesh, lat, lon, hdg, elev, stripe0, stripe1, x - bar_w * 0.5, x + bar_w * 0.5,
                       0.97f, 0.97f, 0.95f);
         }
-        // Designators just past the bars (photo: big "4R").
-        paint_ident(mesh, lat, lon, hdg, elev, stripe1 + 10.0, ident);
+        // Designators just past the bars (photo: big "4R", no leading zero).
+        paint_ident(mesh, lat, lon, hdg, elev, stripe1 + 10.0, marking_ident(ident));
         // AC 150/5340-1M: aiming point starts 1020 ft, 150×30 ft, 72 ft inner.
         const double aim0 = kAimingPointStartFt * geo::kFtToM;
         const double aim1 = aim0 + kAimingPointLenFt * geo::kFtToM;
@@ -222,8 +228,9 @@ void add_faa_markings(AirportMesh& mesh, const Runway& rw) {
             }
         }
     };
-    one_end(rw.le_lat, rw.le_lon, rw.heading_deg, rw.ident_le, rw.le_displaced_ft);
-    one_end(rw.he_lat, rw.he_lon, wrap360(rw.heading_deg + 180.0), rw.ident_he, rw.he_displaced_ft);
+    one_end(rw.le_lat, rw.le_lon, rw.heading_deg, rw.ident_le, rw.le_displaced_ft, rw.emas_le);
+    one_end(rw.he_lat, rw.he_lon, wrap360(rw.heading_deg + 180.0), rw.ident_he, rw.he_displaced_ft,
+            rw.emas_he);
     // Rubber in the first 900 m of each end only — a full-length 0.10
     // strip read as a black blob at the departure end from 0.6 nm.
     auto rubber = [&](double lat, double lon, double hdg, double elev) {
@@ -554,7 +561,7 @@ void lights_for_runway(Airport& a, const Runway& rw, int k) {
                 double plat, plon;
                 offset_m(lat, lon, gate, (6076.0 - 200.0 * i) * geo::kFtToM, plat, plon);
                 push_light(a, plat, plon, light_alt_m(plat, plon, elev) + 0.3, 1.f, 1.f, 1.f,
-                           sw_strobe, LightKind::Flasher, k, i);
+                           kSwRllsLeadIn, LightKind::Flasher, k, i);
             }
         };
         if (sys == "ALSF-2") {
@@ -953,6 +960,17 @@ Building jetbridge_building(const Jetbridge& j) {
 void offset_m(double lat, double lon, double heading_deg, double dist_m, double& olat,
               double& olon) {
     geo::direct_wgs84(lat, lon, heading_deg, dist_m, olat, olon);
+}
+
+RelObserve observe_from_eye(double eye_lat, double eye_lon, double eye_alt_m, double hdg_deg,
+                            double tgt_lat, double tgt_lon, double tgt_alt_m) {
+    RelObserve o;
+    double brg = 0;
+    o.dist_m = geo::inverse_wgs84(eye_lat, eye_lon, tgt_lat, tgt_lon, &brg);
+    o.rel_deg = geo::wrap180(brg - hdg_deg);
+    o.left_m = -o.dist_m * std::sin(geo::deg2rad(o.rel_deg));
+    o.elev_ang_deg = geo::rad2deg(std::atan2(tgt_alt_m - eye_alt_m, o.dist_m));
+    return o;
 }
 
 const char* light_kind_name(LightKind k) {

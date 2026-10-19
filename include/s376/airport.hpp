@@ -28,8 +28,20 @@ constexpr double kAimingPointLenFt = 150.0;
 constexpr double kAimingPointWidthFt = 30.0;
 constexpr double kCenterlineWidthIn = 36.0;
 constexpr double kDisplacedThresholdBarFt = 10.0;
+constexpr double kThresholdStripeStartFt = 20.0; // AC 150/5340-1M from the landing THR
 constexpr int kTdzBarCounts[5] = {3, 2, 2, 1, 1};
 constexpr double kTdzStationFt[5] = {500.0, 1500.0, 2000.0, 2500.0, 3000.0};
+// 13L Chart Supplement lead-in flashers. Separate from ALSF-2 SFL (strobe A)
+// so ILS ops can leave the 1 NM group off. Type-112 switch 70; default step 0.
+constexpr int kSwRllsLeadIn = 70;
+
+// Painted designator: drop a leading zero so 04R reads "4R", 13L stays "13L".
+inline std::string marking_ident(const std::string& faa_ident) {
+    if (faa_ident.size() >= 2 && faa_ident[0] == '0' &&
+        faa_ident[1] >= '1' && faa_ident[1] <= '9')
+        return faa_ident.substr(1);
+    return faa_ident;
+}
 
 inline int threshold_stripe_count(double width_m) {
     const double wft = width_m * geo::kMToFt;
@@ -263,6 +275,24 @@ struct NightLayer {
     int points = 0;
 };
 
+// Named point along an approach, for the KJFK pilot-view checklist.
+struct ApproachMark {
+    std::string name;
+    std::string rwy; // landing ident, e.g. "04R"
+    double lat = 0;
+    double lon = 0;
+};
+
+// Eyepoint observation of a world point. left_m > 0 is left of heading.
+struct RelObserve {
+    double rel_deg = 0;     // bearing minus runway heading, + = right
+    double dist_m = 0;
+    double left_m = 0;      // −cross-track; + = left
+    double elev_ang_deg = 0;
+};
+RelObserve observe_from_eye(double eye_lat, double eye_lon, double eye_alt_m, double hdg_deg,
+                            double tgt_lat, double tgt_lon, double tgt_alt_m);
+
 struct Airport {
     std::string icao;
     std::string name;
@@ -282,6 +312,7 @@ struct Airport {
     std::vector<Taxiway> taxiways;
     std::vector<Apron> aprons;
     std::vector<Building> buildings;
+    std::vector<ApproachMark> approach_marks;
     std::string solids_path; // cache/<ICAO>/solids.bin — full OSM collision set
     std::vector<LightPoint> lights;
     std::vector<AirportSign> signs;

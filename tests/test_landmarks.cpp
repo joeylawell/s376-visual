@@ -84,6 +84,7 @@ void test_landmarks() {
     CHECK(s376::find_landmark("wtc1-1973"));
     CHECK(s376::find_landmark("wtc2-1973"));
     CHECK(s376::find_landmark("onewtc"));
+    CHECK(s376::find_landmark("cpt"));
     CHECK(s376::find_landmark("432park"));
     CHECK(s376::find_landmark("hudson-30"));
     CHECK(s376::find_landmark("empire"));

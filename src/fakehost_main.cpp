@@ -9,6 +9,7 @@
 #include <csignal>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <iostream>
 #include <memory>
@@ -471,6 +472,10 @@ int main(int argc, char** argv) {
                     else if (cmd.op == "vis") env.vis_ft = std::stof(cmd.arg) * 5280.f;
                     else if (cmd.op == "ceiling") env.ceiling_ft_msl = std::stof(cmd.arg);
                     else if (cmd.op == "rvr") { env.rvr_ft = std::stof(cmd.arg); env.fog_top_ft = 300; }
+                    else if (cmd.op == "lead-in") {
+                        const int s = std::atoi(cmd.arg.c_str());
+                        env.lead_in_step = s < 0 ? 0 : s > 5 ? 5 : s;
+                    }
                     else if (cmd.op == "wind") {
                         const auto sl = cmd.arg.find('/');
                         env.wind_dir = std::stof(cmd.arg.substr(0, sl));

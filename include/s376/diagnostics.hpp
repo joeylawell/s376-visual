@@ -1,5 +1,6 @@
 #pragma once
 
+#include "s376/airport.hpp"
 #include "s376/config.hpp"
 #include "s376/state.hpp"
 
@@ -67,5 +68,8 @@ std::string format_approach_bench_summary(const std::vector<ApproachBenchSample>
 std::string format_gpu_pass_table(float measured_ms, bool shadows_on);
 // Joey-pasteable GTA V stack lines (same 12.20 ms budget, named for the demo).
 std::string format_gta_stack_lines(bool shadows_on);
+
+// Eyepoint bearings for the KJFK pilot-view checklist (04R / 13L 6 nm).
+std::string format_pilot_view_bearings(const Airport& apt, const ShotPose& pose);
 
 } // namespace s376

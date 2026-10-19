@@ -66,7 +66,9 @@ void usage() {
            "  --gl-debug            OSG per-attribute GL error checks (off in Release)\n"
            "  --quality NAME        gtx980ti | rtx | custom\n"
            "  --bench               fly 04R (or --approach) and print GPU ms from\n"
-           "                        GL_TIME_ELAPSED. The pass table labels estimates.\n"
+           "                        GL_TIME_ELAPSED, plus eyepoint bearings (tower,\n"
+           "                        terminals, CPT/ESB/1WTC, ground-track marks).\n"
+           "                        The pass table labels estimates.\n"
            "                        Ends with a SUMMARY line Joey can paste.\n"
            "                        gtx980ti auto-drops extras if over budget\n"
            "  --offscreen           pbuffer first (no projector window). Shots still use the FBO\n"
@@ -120,10 +122,11 @@ s376::HostState host_from_shot(const s376::ShotPose& p) {
     h.env.tod_select = -1;
     h.env.tod_hours = 14.5f;
     h.env.visible_range_ft = 528000.f;
-    h.env.month = 6;
-    h.env.day = 21;
-    h.env.year = 2024;
+    h.env.month = 10;
+    h.env.day = 25;
+    h.env.year = 2026;
     h.light_steps.fill(3);
+    h.light_steps[static_cast<std::size_t>(s376::kSwRllsLeadIn)] = 0;
     const s376::Airport apt = s376::airport_by_icao(p.icao);
     const float elev_ft = static_cast<float>(apt.elev_m * s376::geo::kMToFt);
     h.terrain_elev_ft = elev_ft;
@@ -406,6 +409,7 @@ int main(int argc, char** argv) {
             have_shot_tod = true;
             shot_tod = 12.f;
         }
+        cfg.render.solar_astronomy = true;
         cfg.render.frame_rate = 60.0;
         cfg.render.sync_to_host = true;
         if (record_fps == 30.0)
@@ -768,6 +772,11 @@ int main(int argc, char** argv) {
             s.gpu_ms = gpu;
             s.cpu_ms = rend->last_cpu_ms();
             rows.push_back(s);
+        }
+        {
+            s376::ShotPose eye6;
+            if (s376::runway_shot_pose(apt, rwy, 6.0, eye6))
+                std::cout << s376::format_pilot_view_bearings(apt, eye6);
         }
         std::cout << s376::format_approach_bench(rows, cfg.render.gpu_budget_ms, cfg.render.quality,
                                                  rend->autodrop_log());

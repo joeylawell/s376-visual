@@ -135,6 +135,12 @@ void test_diagnostics() {
         const auto nogl = s376::format_approach_bench_summary({}, 12.20f, "gtx980ti", "");
         CHECK(nogl.find("result=NO_GL") != std::string::npos);
         CHECK(nogl.find("60Hz=SKIP") != std::string::npos);
+        const auto jfk = s376::kjfk_public();
+        s376::ShotPose pose;
+        CHECK(s376::runway_shot_pose(jfk, "04R", 6.0, pose));
+        const auto brg = s376::format_pilot_view_bearings(jfk, pose);
+        CHECK(brg.find("ATCT") != std::string::npos);
+        CHECK(brg.find("rel=") != std::string::npos);
         const auto passes = s376::format_gpu_pass_table(8.4f, false);
         CHECK(passes.find("atmosphere") != std::string::npos);
         CHECK(passes.find("total") != std::string::npos);

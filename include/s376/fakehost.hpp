@@ -173,7 +173,8 @@ class ManualFlight {
 // ---------------------------------------------------------------- IOS
 // Minimal instructor station: a tiny HTTP page on loopback (guarded).
 struct IosCommand {
-    std::string op; // reposition | freeze | unfreeze | tod | vis | wind | ceiling | rvr | quit
+    std::string op; // reposition | freeze | unfreeze | tod | vis | wind | ceiling | rvr |
+                    // lead-in | quit
     std::string arg;
 };
 struct IosStatus {
@@ -211,6 +212,7 @@ struct Environment {
     float ceiling_ft_msl = -1, cloud_top_ft_msl = -1; // <0 = no layer
     float rvr_ft = -1, fog_top_ft = 0;                // <0 = no fog
     int light_step = 5;
+    int lead_in_step = 0; // 13L RLLS (type-112 switch 70); 0 = ILS default off
 };
 // One host datagram for frame n (1-based count), same packet mix as s376-synth.
 std::vector<std::uint8_t> build_frame_datagram(const Frame& f, unsigned count,

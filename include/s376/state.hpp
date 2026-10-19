@@ -35,7 +35,10 @@ struct HostState {
     xt4::WordOrder word_order = xt4::WordOrder::Le;
     xt4::FloatFmt float_fmt = xt4::FloatFmt::Vax;
 
-    HostState() { light_steps.fill(3); }
+    HostState() {
+        light_steps.fill(3);
+        light_steps[70] = 0; // 13L RLLS lead-in (kSwRllsLeadIn); ILS default off
+    }
 };
 
 class SharedState {
