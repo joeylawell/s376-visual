@@ -96,7 +96,7 @@ position is not (0, 0).
 | 2 | i16 | Precipitation type (0 off, 1 rain, 2 snow, 3 hail) |
 | 3 | i16 | Precipitation intensity 0…10 |
 | 4–6 | i16 | Month, day, year |
-| 7 | i16 | Runway surface condition code |
+| 7 | i16 | Runway surface condition: **0** dry, **1** damp, **2** wet, **≥3** flooded |
 | 10–11 | i32 | Lightning trigger |
 | 12–13 | f32 | Continuous time of day, hours 0…24 |
 | 14–15 | f32 | Global visibility, feet (cap 600000) |

@@ -119,3 +119,8 @@ HAT replies are exercised. `--record --demo kjfk` stays in-process
 A later Mint IOS emulator maps onto the same `HostState` /
 `ControlSource` — one approved TOML change (`host.bind` /
 `allow_sim_lan`), not a code fork.
+
+The loopback JSON IOS API, live 60 Hz state feed, light/cloud
+commands, and Windows yoke flags are in
+[FAKEHOST_API.md](FAKEHOST_API.md). `fakehost::guard()` stays
+loopback-only.

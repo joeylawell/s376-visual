@@ -46,7 +46,7 @@ which is the fakehost's default `--listen 127.0.0.1:2301`. Keep
 | Scripted approach | `--profile kjfk-04r` / `kjfk-13l` / any `<icao>-<rwy>` in `faa.cpp` |
 | IOS "6 mile final" | `--profile kjfk-04r --six-mile-final [--start 6sm]` |
 | Replay | `--replay data/fakehost/kjfk-04r-sample.csv` (or `.toml`) |
-| Manual | `--manual [--joystick /dev/input/eventN]` |
+| Manual | `--manual [--joystick winmm:0\|xinput:0\|/dev/input/eventN] [--map yoke.toml]` |
 
 `--start` takes units: `6nm` (default), `6sm`, `10nm`, `11km`, bare number = nm.
 
@@ -89,24 +89,41 @@ keys. Timestamps must increase; replay interpolates (heading wraps).
 
 `fakehost::ControlSource` is the input interface; sources stack:
 
-* keyboard: w/s pitch, a/d roll, r/f throttle, g gear, p flaps, l lights, q quit
-* evdev USB joystick / yoke / throttle quadrant: `--joystick /dev/input/eventN`
-  (ABS_X roll, ABS_Y pitch, ABS_THROTTLE/ABS_Z throttle, trigger = gear)
+* keyboard (Windows and Linux): w/s pitch, a/d roll, z/x rudder, r/f throttle,
+  g gear, p flaps, l lights, q quit
+* Linux evdev USB yoke / throttle / pedals: `--joystick /dev/input/eventN`
+* Windows winmm `joyGetPosEx` + XInput: `--joystick auto` / `winmm:0` /
+  `xinput:0` (USB HID yokes show up as winmm devices)
+* Optional SDL2: build `-DS376_SDL2=ON`, then `--joystick sdl:0`
+* Axis/button map + deadzone/calibration: `--map data/fakehost/yoke.toml`,
+  `--calibrate --map-out calibrated.toml`
+* `--controls-replay data/fakehost/controls-10s.csv` — no-hardware CI input
 * `CockpitIoBridge` — **stub interface only** (`--cockpit-io 127.0.0.1:PORT`),
   for a future local cockpit-IO daemon. No CAE or vendor protocol.
-* SDL is not linked (no new dependency); evdev covers USB HID on Linux.
+
+Mapping, Windows flag names and the JSON API: [FAKEHOST_API.md](FAKEHOST_API.md).
 
 Flight model: attitude-hold pitch (stick = pitch rate), lift ∝ v²·α with
 bank load factor, drag by flaps/gear, so it is speed-stable and trimmed
 hands-off at 145 kt / 3° / throttle 0.45 / flaps 30 / gear down; gentle
 wings-level tendency; ground roll with brakes at idle.
 
-### IOS (loopback web page)
+### IOS (loopback web page + JSON API)
 
-`--ios 127.0.0.1:8376` then open http://127.0.0.1:8376/ . Reposition
-(04R/13L at 6 nm, 6 sm, on runway), freeze/unfreeze, TOD, visibility,
-wind, ceiling, RVR, and live status (HAT replies, contacts). Scriptable:
-`curl 'http://127.0.0.1:8376/cmd?op=reposition&arg=kjfk-13l-6sm'`.
+`--ios 127.0.0.1:8376` then open http://127.0.0.1:8376/ (Windows Winsock
+or POSIX). Reposition (preset, runway+distance, or lat/lon/alt/hdg),
+freeze/unfreeze, TOD, weather, runway condition (type-124 word 7:
+0 dry / 1 damp / 2 wet / ≥3 flooded), lights, upper cloud, and a 60 Hz
+live state feed. Adapter contract: [FAKEHOST_API.md](FAKEHOST_API.md).
+
+```sh
+curl 'http://127.0.0.1:8376/cmd?op=reposition&arg=kjfk-13l-6sm'
+curl -s http://127.0.0.1:8376/api/v1/status
+curl -s -X POST http://127.0.0.1:8376/api/v1/tod -d '{"hours":19.5}'
+curl -s -X POST http://127.0.0.1:8376/api/v1/rwy-cond -d '{"condition":2}'
+curl -s -X POST http://127.0.0.1:8376/api/v1/reposition \
+  -d '{"lat":40.64,"lon":-73.78,"alt_ft":1500,"hdg":31}'
+```
 
 ### N channels
 
@@ -144,9 +161,11 @@ modes. Until Joey approves that, the guard stays loopback-only.
 
 ## Tests
 
-`s376-fakehost-tests [path/to/s376-visual]` (ctest name `fakehost`):
-guard, distance units, glidepath/TCH and full 04R/13L profiles, replay
-CSV/TOML round-trip, wire decode in all 4 encodings, flight-model trim,
-IOS parsing + live loopback server, in-process end-to-end through the
-renderer's own `HostReceiver`, and, with a path, the real
-`s376-visual --headless` binary on 127.0.0.1:2300/2301.
+`s376-fakehost-tests [path/to/s376-visual]` (ctest name `fakehost`,
+built on Windows too): guard, distance units, glidepath/TCH and full
+04R/13L profiles, replay CSV/TOML round-trip, yoke TOML / deadzone,
+JSON IOS parse + apply, live loopback HTTP (Winsock or POSIX), 10 s
+manual-input replay, wire decode in all 4 encodings, flight-model trim,
+in-process end-to-end through the renderer's own `HostReceiver`, and,
+with a path, the real `s376-visual --headless` binary on
+127.0.0.1:2300/2301 (POSIX).

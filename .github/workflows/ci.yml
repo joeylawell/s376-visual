@@ -170,6 +170,20 @@ jobs:
           $env:S376_ALLOW_SIM_LAN = ""
           $env:S376_ALLOW_LAN = ""
           ctest --test-dir build -C Release --output-on-failure
+      - name: fakehost IOS + 10s replay
+        shell: pwsh
+        run: |
+          $env:S376_ALLOW_SIM_LAN = ""
+          $env:S376_ALLOW_LAN = ""
+          $exe = "build/Release/s376-fakehost-tests.exe"
+          if (-not (Test-Path $exe)) { $exe = "build/s376-fakehost-tests.exe" }
+          & $exe
+          if ($LASTEXITCODE -ne 0) { throw "fakehost tests failed" }
+          $fh = "build/Release/s376-fakehost.exe"
+          if (-not (Test-Path $fh)) { $fh = "build/s376-fakehost.exe" }
+          & $fh --calibrate --map data/fakehost/yoke.toml --map-out $env:TEMP/s376-yoke.toml --dry-run
+          if ($LASTEXITCODE -ne 0) { throw "calibrate failed" }
+          if (-not (Test-Path "$env:TEMP/s376-yoke.toml")) { throw "calibrated map missing" }
       - name: pack zip
         shell: pwsh
         run: ./scripts/pack-windows.ps1 -BuildDir build -OutZip s376-visual-windows.zip

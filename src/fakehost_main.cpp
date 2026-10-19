@@ -4,18 +4,35 @@
 #include "s376/config.hpp"
 #include "s376/fakehost.hpp"
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <csignal>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <iostream>
 #include <memory>
 #include <string>
 #include <thread>
 
-#ifndef _WIN32
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#include <mmsystem.h>
+#include <xinput.h>
+#include <conio.h>
+#ifdef S376_HAS_SDL2
+#include <SDL.h>
+#endif
+#else
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <netinet/in.h>
@@ -25,6 +42,9 @@
 #ifdef __linux__
 #include <linux/input.h>
 #include <sys/ioctl.h>
+#endif
+#ifdef S376_HAS_SDL2
+#include <SDL.h>
 #endif
 #endif
 
@@ -47,16 +67,27 @@ void usage() {
         "  --vref KT           Vref flaps 30 (default 140; approach speed Vref+5)\n"
         "  --replay FILE       timestamped .csv or .toml trajectory\n"
         "  --manual            keyboard flight (w/s pitch, a/d roll, r/f throttle, g gear,\n"
-        "                      p flaps, l lights, q quit); --joystick /dev/input/eventN\n"
+        "                      p flaps, l lights, q quit)\n"
+        "  --joystick SPEC     Linux evdev path, or Windows winmm:N / xinput:N / auto\n"
+        "                      (optional sdl:N if built with -DS376_SDL2=ON)\n"
+        "  --map TOML          yoke/throttle/pedals axis+button map (see FAKEHOST_API.md)\n"
+        "  --calibrate         sample the joystick and write a calibrated map\n"
+        "  --map-out TOML      --calibrate destination (default stdout / yoke.toml)\n"
+        "  --controls-replay F timestamped control CSV (CI / no hardware)\n"
         "  --fps N             host frame rate (default 60)\n"
         "  --duration SEC      stop after SEC (default: end of profile/replay)\n"
         "  --dest HOST:PORT    renderer host port (default 127.0.0.1:2300); repeat for\n"
         "                      N channels (each renderer --bind 127.0.0.1:23x0)\n"
-        "  --ios HOST:PORT     IOS web page on loopback, e.g. 127.0.0.1:8376\n"
+        "  --ios HOST:PORT     IOS HTML + JSON API on loopback, e.g. 127.0.0.1:8376\n"
+        "  --ceiling-top FT    lower cloud top, ft MSL\n"
+        "  --upper-cloud BASE/TOP  upper cloud layer, ft MSL (type 126)\n"
+        "  --lights STEP       type-112 intensity 0-5 for runway+approach+environment\n"
         "  --cockpit-io EP     future cockpit-IO bridge (stub interface, loopback EP)\n"
         "  --listen HOST:PORT  HAT reply port (default 127.0.0.1:2301)\n"
         "  --encoding O/F      le/vax (default) | be/vax | le/ieee | be/ieee\n"
         "  --tod HOURS         time of day (default 14.5)\n"
+        "  --rwy-cond N        type-124 runway condition 0 dry / 1 damp / 2 wet / ≥3 flooded\n"
+        "  --wet               same as --rwy-cond 2\n"
         "  --vis-sm SM         global visibility statute miles (default 10)\n"
         "  --wind DIR/MPH      surface wind (default calm)\n"
         "  --ceiling FT        lower cloud base, ft MSL (default none)\n"
@@ -90,36 +121,53 @@ struct RawTerm {
 };
 #endif
 
-#ifndef _WIN32
+static void apply_key(char c, fh::Controls& ctl) {
+    switch (c) {
+    case 'w': ctl.elevator = -1; break; // stick forward
+    case 's': ctl.elevator = 1; break;
+    case 'a': ctl.aileron = -1; break;
+    case 'd': ctl.aileron = 1; break;
+    case 'z': ctl.rudder = -1; break;
+    case 'x': ctl.rudder = 1; break;
+    case 'r': ctl.throttle = std::min(1.0, ctl.throttle + 0.05); break;
+    case 'f': ctl.throttle = std::max(0.0, ctl.throttle - 0.05); break;
+    case 'g': ctl.gear_down = !ctl.gear_down; break;
+    case 'p': ctl.flaps = ctl.flaps == 30 ? 40 : ctl.flaps == 40 ? 0 : ctl.flaps == 0 ? 15 : 30; break;
+    case 'l': ctl.lights = !ctl.lights; break;
+    case 'q': g_stop = true; break;
+    default: break;
+    }
+}
+
 class KeyboardSource : public fh::ControlSource {
   public:
     const char* name() const override { return "keyboard"; }
     void poll(fh::Controls& ctl) override {
-        char c;
         ctl.elevator *= 0.7;
         ctl.aileron *= 0.7;
-        while (::read(0, &c, 1) == 1) {
-            switch (c) {
-            case 'w': ctl.elevator = -1; break; // stick forward
-            case 's': ctl.elevator = 1; break;
-            case 'a': ctl.aileron = -1; break;
-            case 'd': ctl.aileron = 1; break;
-            case 'r': ctl.throttle = std::min(1.0, ctl.throttle + 0.05); break;
-            case 'f': ctl.throttle = std::max(0.0, ctl.throttle - 0.05); break;
-            case 'g': ctl.gear_down = !ctl.gear_down; break;
-            case 'p': ctl.flaps = ctl.flaps == 30 ? 40 : ctl.flaps == 40 ? 0 : ctl.flaps == 0 ? 15 : 30; break;
-            case 'l': ctl.lights = !ctl.lights; break;
-            case 'q': g_stop = true; break;
-            default: break;
-            }
-        }
+        ctl.rudder *= 0.7;
+#ifdef _WIN32
+        while (_kbhit())
+            apply_key(static_cast<char>(_getch()), ctl);
+#else
+        char c;
+        while (::read(0, &c, 1) == 1)
+            apply_key(c, ctl);
+#endif
     }
 };
+
+static double unit_from_range(int v, int lo, int hi) {
+    if (hi == lo)
+        return 0;
+    return 2.0 * (static_cast<double>(v) - lo) / (static_cast<double>(hi) - lo) - 1.0;
+}
+
 #ifdef __linux__
 // USB joystick / yoke / throttle quadrant through Linux evdev.
 class EvdevSource : public fh::ControlSource {
   public:
-    explicit EvdevSource(const std::string& path) : path_(path) {
+    EvdevSource(const std::string& path, fh::InputMap map) : path_(path), map_(std::move(map)) {
         fd_ = ::open(path.c_str(), O_RDONLY | O_NONBLOCK);
         if (fd_ < 0)
             std::perror(path.c_str());
@@ -127,13 +175,27 @@ class EvdevSource : public fh::ControlSource {
     ~EvdevSource() override { if (fd_ >= 0) ::close(fd_); }
     const char* name() const override { return "evdev"; }
     bool ok() const override { return fd_ >= 0; }
+    fh::RawAxes raw() const { return raw_; }
+    bool last_raw(fh::RawAxes& out) const override {
+        out = raw_;
+        return fd_ >= 0;
+    }
     void poll(fh::Controls& ctl) override {
         input_event ev;
         while (fd_ >= 0 && ::read(fd_, &ev, sizeof(ev)) == sizeof(ev)) {
-            if (ev.type == EV_KEY && ev.value == 1) {
-                if (ev.code == BTN_TRIGGER || ev.code == BTN_SOUTH) ctl.gear_down = !ctl.gear_down;
-                if (ev.code == BTN_THUMB || ev.code == BTN_EAST)
-                    ctl.flaps = ctl.flaps == 30 ? 40 : ctl.flaps == 40 ? 15 : 30;
+            if (ev.type == EV_KEY) {
+                int bit = -1;
+                if (ev.code == BTN_TRIGGER || ev.code == BTN_SOUTH || ev.code == BTN_0) bit = 0;
+                else if (ev.code == BTN_THUMB || ev.code == BTN_EAST || ev.code == BTN_1) bit = 1;
+                else if (ev.code == BTN_THUMB2 || ev.code == BTN_WEST || ev.code == BTN_2) bit = 2;
+                else if (ev.code >= BTN_JOYSTICK && ev.code < BTN_JOYSTICK + 16)
+                    bit = ev.code - BTN_JOYSTICK;
+                if (bit >= 0) {
+                    if (ev.value)
+                        raw_.buttons |= (1u << bit);
+                    else
+                        raw_.buttons &= ~(1u << bit);
+                }
                 continue;
             }
             if (ev.type != EV_ABS)
@@ -141,22 +203,265 @@ class EvdevSource : public fh::ControlSource {
             input_absinfo ai{};
             if (ioctl(fd_, EVIOCGABS(ev.code), &ai) != 0 || ai.maximum == ai.minimum)
                 continue;
-            double u = 2.0 * (ev.value - ai.minimum) / (ai.maximum - ai.minimum) - 1.0;
-            if (std::fabs(u) < 0.04) u = 0; // dead zone
-            if (ev.code == ABS_X) ctl.aileron = u;
-            else if (ev.code == ABS_Y) ctl.elevator = -u;
-            else if (ev.code == ABS_THROTTLE || ev.code == ABS_Z) ctl.throttle = (1 - u) / 2;
+            const double u = unit_from_range(ev.value, ai.minimum, ai.maximum);
+            if (ev.code == ABS_X) raw_.x = u;
+            else if (ev.code == ABS_Y) raw_.y = u;
+            else if (ev.code == ABS_Z) raw_.z = u;
+            else if (ev.code == ABS_RX) raw_.rx = u;
+            else if (ev.code == ABS_RY) raw_.ry = u;
+            else if (ev.code == ABS_RZ) raw_.rz = u;
+            else if (ev.code == ABS_THROTTLE) raw_.z = u;
+            else if (ev.code == ABS_HAT0X) raw_.hatx = u;
+            else if (ev.code == ABS_HAT0Y) raw_.haty = u;
         }
+        fh::apply_input_map(map_, raw_, ctl, prev_);
     }
   private:
     std::string path_;
+    fh::InputMap map_;
+    fh::RawAxes raw_{};
+    std::uint32_t prev_ = 0;
     int fd_ = -1;
 };
 #endif
+
+#ifdef _WIN32
+// USB HID yoke / throttle / pedals via winmm joyGetPosEx (DirectInput-class
+// devices). Axis names: x y z rx ry rz slider.
+class WinmmJoySource : public fh::ControlSource {
+  public:
+    WinmmJoySource(unsigned id, fh::InputMap map) : id_(id), map_(std::move(map)) {
+        JOYINFOEX ji{};
+        ji.dwSize = sizeof(ji);
+        ji.dwFlags = JOY_RETURNALL;
+        ok_ = joyGetPosEx(id_, &ji) == JOYERR_NOERROR;
+        if (!ok_)
+            std::fprintf(stderr, "winmm:%u not present\n", id_);
+    }
+    const char* name() const override { return "winmm"; }
+    bool ok() const override { return ok_; }
+    fh::RawAxes raw() const { return raw_; }
+    bool last_raw(fh::RawAxes& out) const override {
+        out = raw_;
+        return ok_;
+    }
+    void poll(fh::Controls& ctl) override {
+        JOYINFOEX ji{};
+        ji.dwSize = sizeof(ji);
+        ji.dwFlags = JOY_RETURNALL;
+        if (joyGetPosEx(id_, &ji) != JOYERR_NOERROR) {
+            ok_ = false;
+            return;
+        }
+        ok_ = true;
+        raw_.x = unit_from_range(static_cast<int>(ji.dwXpos), 0, 65535);
+        raw_.y = unit_from_range(static_cast<int>(ji.dwYpos), 0, 65535);
+        raw_.z = unit_from_range(static_cast<int>(ji.dwZpos), 0, 65535);
+        raw_.rx = unit_from_range(static_cast<int>(ji.dwRpos), 0, 65535);
+        raw_.ry = unit_from_range(static_cast<int>(ji.dwUpos), 0, 65535);
+        raw_.rz = unit_from_range(static_cast<int>(ji.dwVpos), 0, 65535);
+        raw_.slider = raw_.z;
+        raw_.buttons = ji.dwButtons;
+        fh::apply_input_map(map_, raw_, ctl, prev_);
+    }
+  private:
+    unsigned id_ = 0;
+    fh::InputMap map_;
+    fh::RawAxes raw_{};
+    std::uint32_t prev_ = 0;
+    bool ok_ = false;
+};
+
+class XInputSource : public fh::ControlSource {
+  public:
+    XInputSource(unsigned id, fh::InputMap map) : id_(id), map_(std::move(map)) {
+        XINPUT_STATE st{};
+        ok_ = XInputGetState(id_, &st) == ERROR_SUCCESS;
+        if (!ok_)
+            std::fprintf(stderr, "xinput:%u not present\n", id_);
+    }
+    const char* name() const override { return "xinput"; }
+    bool ok() const override { return ok_; }
+    fh::RawAxes raw() const { return raw_; }
+    bool last_raw(fh::RawAxes& out) const override {
+        out = raw_;
+        return ok_;
+    }
+    void poll(fh::Controls& ctl) override {
+        XINPUT_STATE st{};
+        if (XInputGetState(id_, &st) != ERROR_SUCCESS) {
+            ok_ = false;
+            return;
+        }
+        ok_ = true;
+        raw_.lx = st.Gamepad.sThumbLX / 32768.0;
+        raw_.ly = st.Gamepad.sThumbLY / 32768.0;
+        raw_.xirx = st.Gamepad.sThumbRX / 32768.0;
+        raw_.xiry = st.Gamepad.sThumbRY / 32768.0;
+        raw_.lt = st.Gamepad.bLeftTrigger / 255.0;
+        raw_.rt = st.Gamepad.bRightTrigger / 255.0;
+        raw_.x = raw_.lx;
+        raw_.y = raw_.ly;
+        raw_.rx = raw_.xirx;
+        raw_.z = raw_.rt * 2 - 1;
+        raw_.buttons = 0;
+        static const WORD kBtn[] = {XINPUT_GAMEPAD_A,           XINPUT_GAMEPAD_B,
+                                    XINPUT_GAMEPAD_X,           XINPUT_GAMEPAD_Y,
+                                    XINPUT_GAMEPAD_LEFT_SHOULDER, XINPUT_GAMEPAD_RIGHT_SHOULDER,
+                                    XINPUT_GAMEPAD_BACK,        XINPUT_GAMEPAD_START,
+                                    XINPUT_GAMEPAD_LEFT_THUMB,  XINPUT_GAMEPAD_RIGHT_THUMB};
+        for (int i = 0; i < 10; ++i)
+            if (st.Gamepad.wButtons & kBtn[i])
+                raw_.buttons |= (1u << i);
+        fh::apply_input_map(map_, raw_, ctl, prev_);
+    }
+  private:
+    unsigned id_ = 0;
+    fh::InputMap map_;
+    fh::RawAxes raw_{};
+    std::uint32_t prev_ = 0;
+    bool ok_ = false;
+};
+#endif
+
+#ifdef S376_HAS_SDL2
+class Sdl2Source : public fh::ControlSource {
+  public:
+    Sdl2Source(int index, fh::InputMap map) : map_(std::move(map)) {
+        if (SDL_WasInit(SDL_INIT_JOYSTICK) == 0)
+            SDL_InitSubSystem(SDL_INIT_JOYSTICK);
+        SDL_JoystickEventState(SDL_ENABLE);
+        if (index < 0)
+            index = 0;
+        if (SDL_NumJoysticks() <= index) {
+            std::fprintf(stderr, "sdl:%d not present (%d joysticks)\n", index, SDL_NumJoysticks());
+            return;
+        }
+        js_ = SDL_JoystickOpen(index);
+    }
+    ~Sdl2Source() override {
+        if (js_)
+            SDL_JoystickClose(js_);
+    }
+    const char* name() const override { return "sdl2"; }
+    bool ok() const override { return js_ != nullptr; }
+    fh::RawAxes raw() const { return raw_; }
+    bool last_raw(fh::RawAxes& out) const override {
+        out = raw_;
+        return js_ != nullptr;
+    }
+    void poll(fh::Controls& ctl) override {
+        if (!js_)
+            return;
+        SDL_JoystickUpdate();
+        auto ax = [&](int i) -> double {
+            if (i < 0 || i >= SDL_JoystickNumAxes(js_))
+                return 0;
+            return SDL_JoystickGetAxis(js_, i) / 32768.0;
+        };
+        raw_.x = ax(0);
+        raw_.y = ax(1);
+        raw_.z = ax(2);
+        raw_.rx = ax(3);
+        raw_.ry = ax(4);
+        raw_.rz = ax(5);
+        raw_.slider = ax(6);
+        raw_.buttons = 0;
+        const int nb = std::min(32, SDL_JoystickNumButtons(js_));
+        for (int i = 0; i < nb; ++i)
+            if (SDL_JoystickGetButton(js_, i))
+                raw_.buttons |= (1u << i);
+        if (SDL_JoystickNumHats(js_) > 0) {
+            const Uint8 h = SDL_JoystickGetHat(js_, 0);
+            raw_.hatx = (h & SDL_HAT_RIGHT) ? 1 : (h & SDL_HAT_LEFT) ? -1 : 0;
+            raw_.haty = (h & SDL_HAT_DOWN) ? 1 : (h & SDL_HAT_UP) ? -1 : 0;
+        }
+        fh::apply_input_map(map_, raw_, ctl, prev_);
+    }
+  private:
+    fh::InputMap map_;
+    fh::RawAxes raw_{};
+    std::uint32_t prev_ = 0;
+    SDL_Joystick* js_ = nullptr;
+};
+#endif
+
+static std::unique_ptr<fh::ControlSource> open_joystick(const std::string& spec, const fh::InputMap& map) {
+    if (spec.empty())
+        return nullptr;
+#ifdef __linux__
+    if (spec[0] == '/' || spec.rfind("event", 0) == 0 || spec.find("input") != std::string::npos)
+        return std::make_unique<EvdevSource>(spec, map);
+#endif
+#ifdef S376_HAS_SDL2
+    if (spec.rfind("sdl", 0) == 0) {
+        int idx = 0;
+        const auto col = spec.find(':');
+        if (col != std::string::npos)
+            idx = std::atoi(spec.c_str() + col + 1);
+        return std::make_unique<Sdl2Source>(idx, map);
+    }
+#endif
+#ifdef _WIN32
+    auto idx_of = [&](const char* pfx) -> int {
+        const std::string p = pfx;
+        if (spec == p || spec == "auto")
+            return 0;
+        if (spec.rfind(p + ":", 0) == 0)
+            return std::atoi(spec.c_str() + p.size() + 1);
+        return -1;
+    };
+    if (spec == "auto") {
+        auto w = std::make_unique<WinmmJoySource>(0, map);
+        if (w->ok())
+            return w;
+        auto x = std::make_unique<XInputSource>(0, map);
+        if (x->ok())
+            return x;
+        std::fprintf(stderr, "joystick auto: no winmm or XInput device\n");
+        return w;
+    }
+    const int wi = idx_of("winmm");
+    if (wi >= 0)
+        return std::make_unique<WinmmJoySource>(static_cast<unsigned>(wi), map);
+    const int xi = idx_of("xinput");
+    if (xi >= 0)
+        return std::make_unique<XInputSource>(static_cast<unsigned>(xi), map);
+    // bare integer = winmm id
+    if (spec.find_first_not_of("0123456789") == std::string::npos)
+        return std::make_unique<WinmmJoySource>(static_cast<unsigned>(std::atoi(spec.c_str())), map);
+#endif
+#ifdef __linux__
+    return std::make_unique<EvdevSource>(spec, map);
+#else
+    std::fprintf(stderr, "unknown --joystick %s\n", spec.c_str());
+    return nullptr;
+#endif
+}
+
+#ifdef _WIN32
+using UdpFd = SOCKET;
+constexpr UdpFd kUdpInvalid = INVALID_SOCKET;
+void udp_close(UdpFd s) {
+    if (s != kUdpInvalid)
+        closesocket(s);
+}
+void udp_nonblock(UdpFd s) {
+    u_long nb = 1;
+    ioctlsocket(s, FIONBIO, &nb);
+}
+#else
+using UdpFd = int;
+constexpr UdpFd kUdpInvalid = -1;
+void udp_close(UdpFd s) {
+    if (s >= 0)
+        ::close(s);
+}
+void udp_nonblock(UdpFd s) { fcntl(s, F_SETFL, fcntl(s, F_GETFL) | O_NONBLOCK); }
 #endif
 
 struct Sock {
-    int fd = -1;
+    UdpFd fd = kUdpInvalid;
     sockaddr_storage dest{};
     socklen_t dlen = 0;
     std::vector<std::pair<sockaddr_storage, socklen_t>> extra; // more renderer channels
@@ -180,9 +485,17 @@ struct Sock {
     bool open(const std::string& dhost, std::uint16_t dport, const std::string& lhost,
               std::uint16_t lport) {
         const bool v6 = dhost.find(':') != std::string::npos;
+#ifdef _WIN32
+        WSADATA wsa{};
+        WSAStartup(MAKEWORD(2, 2), &wsa);
+        fd = socket(v6 ? AF_INET6 : AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+        if (fd == kUdpInvalid)
+            return false;
+#else
         fd = ::socket(v6 ? AF_INET6 : AF_INET, SOCK_DGRAM, 0);
         if (fd < 0)
             return false;
+#endif
         sockaddr_storage la{};
         socklen_t llen;
         if (v6) {
@@ -214,26 +527,45 @@ struct Sock {
         fh::guard_sockaddr(&dest, dlen, "send to");
         fh::guard_sockaddr(&la, llen, "bind");
         int one = 1;
+#ifdef _WIN32
+        setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, reinterpret_cast<const char*>(&one), sizeof(one));
+#else
         setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
+#endif
         if (::bind(fd, reinterpret_cast<sockaddr*>(&la), llen) != 0) {
             std::perror("bind");
             return false;
         }
-        fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK);
+        udp_nonblock(fd);
         return true;
     }
     void send(const std::vector<std::uint8_t>& b) {
         fh::guard_sockaddr(&dest, dlen, "send to"); // every datagram
+#ifdef _WIN32
+        ::sendto(fd, reinterpret_cast<const char*>(b.data()), static_cast<int>(b.size()), 0,
+                 reinterpret_cast<sockaddr*>(&dest), dlen);
+        for (auto& e : extra) {
+            fh::guard_sockaddr(&e.first, e.second, "send to");
+            ::sendto(fd, reinterpret_cast<const char*>(b.data()), static_cast<int>(b.size()), 0,
+                     reinterpret_cast<sockaddr*>(&e.first), e.second);
+        }
+#else
         ::sendto(fd, b.data(), b.size(), 0, reinterpret_cast<sockaddr*>(&dest), dlen);
         for (auto& e : extra) {
             fh::guard_sockaddr(&e.first, e.second, "send to");
             ::sendto(fd, b.data(), b.size(), 0, reinterpret_cast<sockaddr*>(&e.first), e.second);
         }
+#endif
     }
     int recv(std::uint8_t* buf, std::size_t n) {
         sockaddr_storage from{};
         socklen_t fl = sizeof(from);
+#ifdef _WIN32
+        const int r = ::recvfrom(fd, reinterpret_cast<char*>(buf), static_cast<int>(n), 0,
+                                 reinterpret_cast<sockaddr*>(&from), &fl);
+#else
         const auto r = ::recvfrom(fd, buf, n, 0, reinterpret_cast<sockaddr*>(&from), &fl);
+#endif
         if (r <= 0)
             return -1;
         try {
@@ -243,10 +575,7 @@ struct Sock {
         }
         return static_cast<int>(r);
     }
-    ~Sock() {
-        if (fd >= 0)
-            ::close(fd);
-    }
+    ~Sock() { udp_close(fd); }
 };
 
 } // namespace
@@ -254,10 +583,11 @@ struct Sock {
 int main(int argc, char** argv) {
     std::string profile, replay, dest = "127.0.0.1:2300", listen = "127.0.0.1:2301";
     std::string start = "6nm", record_out, joystick, encoding = "le/vax", ios_bind, cockpit_io;
+    std::string map_path, map_out, controls_replay;
     std::vector<std::string> extra_dests;
     bool dest_given = false;
     bool manual = false, six = false, fast = false, dry = false, check = false, quiet = false;
-    bool start_given = false;
+    bool start_given = false, calibrate = false;
     double fps = 60, duration = -1, gs = 3.0, vref = 140, hat_tol = 20;
     fh::Environment env;
     for (int i = 1; i < argc; ++i) {
@@ -286,6 +616,12 @@ int main(int argc, char** argv) {
             else if (a == "--listen") listen = need();
             else if (a == "--encoding") encoding = need();
             else if (a == "--tod") env.tod_hours = std::stof(need());
+            else if (a == "--rwy-cond") {
+                env.runway_condition = std::stoi(need());
+                if (env.runway_condition < 0)
+                    env.runway_condition = 0;
+            } else if (a == "--wet")
+                env.runway_condition = 2;
             else if (a == "--vis-sm") env.vis_ft = std::stof(need()) * 5280.f;
             else if (a == "--wind") {
                 const std::string w = need();
@@ -293,9 +629,24 @@ int main(int argc, char** argv) {
                 env.wind_dir = std::stof(w.substr(0, sl));
                 env.wind_mph = sl == std::string::npos ? 0 : std::stof(w.substr(sl + 1));
             } else if (a == "--ceiling") env.ceiling_ft_msl = std::stof(need());
-            else if (a == "--rvr") { env.rvr_ft = std::stof(need()); env.fog_top_ft = 300; }
+            else if (a == "--ceiling-top") env.cloud_top_ft_msl = std::stof(need());
+            else if (a == "--upper-cloud") {
+                const std::string u = need();
+                const auto sl = u.find('/');
+                env.upper_ceiling_ft_msl = std::stof(u.substr(0, sl));
+                env.upper_top_ft_msl = sl == std::string::npos
+                                           ? env.upper_ceiling_ft_msl + 2000.f
+                                           : std::stof(u.substr(sl + 1));
+            } else if (a == "--lights") {
+                const int s = std::max(0, std::min(5, std::stoi(need())));
+                env.light_step = env.rwy_light_step = env.apch_light_step = env.env_light_step = s;
+            } else if (a == "--rvr") { env.rvr_ft = std::stof(need()); env.fog_top_ft = 300; }
             else if (a == "--record-out") record_out = need();
             else if (a == "--joystick") joystick = need();
+            else if (a == "--map") map_path = need();
+            else if (a == "--map-out") map_out = need();
+            else if (a == "--calibrate") calibrate = true;
+            else if (a == "--controls-replay") controls_replay = need();
             else if (a == "--fast") fast = true;
             else if (a == "--dry-run") dry = true;
             else if (a == "--check") check = true;
@@ -308,6 +659,13 @@ int main(int argc, char** argv) {
         }
     }
     (void)start_given;
+    if (!controls_replay.empty())
+        manual = true;
+    if (calibrate) {
+        dry = true;
+        if (!manual && profile.empty() && replay.empty())
+            manual = true;
+    }
     if ((!profile.empty()) + (!replay.empty()) + manual != 1) {
         usage();
         return 2;
@@ -400,18 +758,86 @@ int main(int argc, char** argv) {
                      encoding.c_str(), fps, dhost.c_str(), dport, lhost.c_str(), lport);
     }
 
+    fh::InputMap imap;
+    if (!map_path.empty()) {
+        try {
+            imap = fh::load_input_map(map_path);
+        } catch (const std::exception& ex) {
+            std::cerr << ex.what() << "\n";
+            return 2;
+        }
+    }
+    std::unique_ptr<fh::ReplayControlSource> replay_ctl;
+    if (!controls_replay.empty()) {
+        try {
+            replay_ctl = std::make_unique<fh::ReplayControlSource>(fh::ReplayControlSource::load(controls_replay));
+            if (duration < 0)
+                duration = replay_ctl->duration();
+            manual = true;
+        } catch (const std::exception& ex) {
+            std::cerr << ex.what() << "\n";
+            return 2;
+        }
+    }
     std::vector<std::unique_ptr<fh::ControlSource>> sources;
 #ifndef _WIN32
     RawTerm term;
+#endif
     if (manual) {
+#ifndef _WIN32
         term.enable();
-        sources.push_back(std::make_unique<KeyboardSource>());
-#ifdef __linux__
-        if (!joystick.empty())
-            sources.push_back(std::make_unique<EvdevSource>(joystick));
 #endif
+        if (!replay_ctl)
+            sources.push_back(std::make_unique<KeyboardSource>());
+        if (!joystick.empty()) {
+            if (auto js = open_joystick(joystick, imap))
+                sources.push_back(std::move(js));
+        }
+        if (replay_ctl)
+            sources.push_back(std::move(replay_ctl));
     }
-#endif
+    if (calibrate) {
+        fh::InputMap cal = imap;
+        const bool have_js = !joystick.empty();
+        const auto t1 = std::chrono::steady_clock::now() + std::chrono::seconds(have_js ? 8 : 0);
+        fh::Controls dummy;
+        int samples = 0;
+        do {
+            for (auto& src : sources)
+                src->poll(dummy);
+            for (auto& src : sources) {
+                fh::RawAxes raw{};
+                if (!src->last_raw(raw))
+                    continue;
+                auto note = [&](const std::string& srcn, fh::AxisCal& c) {
+                    const double* p = fh::raw_axis_ptr(raw, srcn);
+                    if (p)
+                        fh::cal_note(c, *p);
+                };
+                note(cal.aileron_src, cal.aileron);
+                note(cal.elevator_src, cal.elevator);
+                note(cal.rudder_src, cal.rudder);
+                note(cal.throttle_src, cal.throttle);
+                ++samples;
+            }
+            if (!have_js)
+                break;
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        } while (std::chrono::steady_clock::now() < t1 && !g_stop);
+        fh::cal_finish(cal.aileron);
+        fh::cal_finish(cal.elevator);
+        fh::cal_finish(cal.rudder);
+        fh::cal_finish(cal.throttle);
+        std::fprintf(stderr, "calibrate: %d samples%s\n", samples,
+                     have_js ? "" : " (no --joystick; writing current map)");
+        if (!map_out.empty()) {
+            fh::save_input_map(map_out, cal);
+            std::fprintf(stderr, "wrote calibrated map to %s\n", map_out.c_str());
+        } else {
+            std::cout << fh::format_input_map_toml(cal);
+        }
+        return 0;
+    }
     if (!cockpit_io.empty()) {
         try {
             fh::CockpitIoConfig cc;
@@ -436,12 +862,18 @@ int main(int argc, char** argv) {
         std::fprintf(stderr, "IOS: http://127.0.0.1:%u/\n", ios.port());
     }
     bool frozen = false;
+    fh::LiveStateFeed live;
     ist.mode = manual ? "manual" : prof ? "profile" : "replay";
     ist.preset = profile.empty() ? (manual ? "kjfk-04r-" + start : replay) : profile + "-" + start;
     long tick = 0;
     fh::Controls ctl;
     ctl.flaps = 30;
     ctl.throttle = 0.45;
+    fh::ReplayControlSource* replay_src = nullptr;
+    for (auto& src : sources) {
+        if (std::strcmp(src->name(), "replay") == 0)
+            replay_src = static_cast<fh::ReplayControlSource*>(src.get());
+    }
 
     const double dt = 1.0 / fps;
     std::vector<fh::Frame> sent;
@@ -461,24 +893,42 @@ int main(int argc, char** argv) {
             ist.frozen = frozen;
             ist.t = last.t; ist.phase = last.phase; ist.wheel_agl = last.wheel_agl_ft;
             ist.gs_kt = last.gs_kt; ist.lat = last.lat; ist.lon = last.lon; ist.alt = last.alt_ft;
+            ist.hdg = last.hdg; ist.pitch = last.pitch; ist.roll = last.roll;
+            ist.gear_down = last.gear_down; ist.flaps = last.flaps;
             ist.hat_replies = chk.replies; ist.contacts = chk.contacts;
+            ist.tod_hours = env.tod_hours;
+            ist.vis_sm = env.vis_ft / 5280.f;
+            ist.wind_dir = env.wind_dir; ist.wind_mph = env.wind_mph;
+            ist.ceiling_ft = env.ceiling_ft_msl; ist.cloud_top_ft = env.cloud_top_ft_msl;
+            ist.upper_ceiling_ft = env.upper_ceiling_ft_msl; ist.upper_top_ft = env.upper_top_ft_msl;
+            ist.rvr_ft = env.rvr_ft;
+            ist.rwy_cond = env.runway_condition;
+            ist.light_step = env.light_step; ist.rwy_light = env.rwy_light_step;
+            ist.apch_light = env.apch_light_step; ist.env_light = env.env_light_step;
             for (const auto& cmd : ios.poll(ist)) {
                 try {
-                    if (cmd.op == "freeze") frozen = true;
-                    else if (cmd.op == "unfreeze") frozen = false;
-                    else if (cmd.op == "quit") g_stop = true;
-                    else if (cmd.op == "tod") env.tod_hours = std::stof(cmd.arg);
-                    else if (cmd.op == "vis") env.vis_ft = std::stof(cmd.arg) * 5280.f;
-                    else if (cmd.op == "ceiling") env.ceiling_ft_msl = std::stof(cmd.arg);
-                    else if (cmd.op == "rvr") { env.rvr_ft = std::stof(cmd.arg); env.fog_top_ft = 300; }
-                    else if (cmd.op == "wind") {
-                        const auto sl = cmd.arg.find('/');
-                        env.wind_dir = std::stof(cmd.arg.substr(0, sl));
-                        env.wind_mph = sl == std::string::npos ? 0 : std::stof(cmd.arg.substr(sl + 1));
-                    } else if (cmd.op == "reposition") {
-                        std::string ic, rw; double snm; bool onr;
-                        if (!fh::parse_preset(cmd.arg, ic, rw, snm, onr))
-                            throw std::invalid_argument("bad preset " + cmd.arg);
+                    const auto eff = fh::apply_ios_command(cmd, env, &live);
+                    if (eff.quit) g_stop = true;
+                    if (eff.set_frozen) frozen = eff.frozen;
+                    if (eff.reposition_lla) {
+                        if (!man)
+                            man = std::make_unique<fh::ManualFlight>(rwy, 0, gs, true);
+                        man->reposition_lla(eff.lat, eff.lon, eff.alt_ft, eff.hdg);
+                        prof.reset();
+                        traj.clear();
+                        ist.mode = "manual";
+                        ist.preset = "lla";
+                        n = 0;
+                        std::fprintf(stderr, "IOS reposition lla %.6f %.6f alt=%.0f hdg=%.1f\n",
+                                     eff.lat, eff.lon, eff.alt_ft, eff.hdg);
+                    } else if (eff.reposition) {
+                        std::string ic = eff.icao, rw = eff.runway;
+                        double snm = eff.start_nm;
+                        bool onr = eff.on_runway;
+                        if (ic.empty() && !eff.preset.empty()) {
+                            if (!fh::parse_preset(eff.preset, ic, rw, snm, onr))
+                                throw std::invalid_argument("bad preset " + eff.preset);
+                        }
                         rwy = fh::runway_from_faa(ic, rw);
                         if (man || onr) {
                             if (!man) { man = std::make_unique<fh::ManualFlight>(rwy, snm, gs, onr); prof.reset(); traj.clear(); ist.mode = "manual"; }
@@ -493,22 +943,35 @@ int main(int argc, char** argv) {
                             traj.clear(); ist.mode = "profile";
                         }
                         chk = fh::Checker{}; chk.td_tol_ft = hat_tol;
-                        ist.preset = cmd.arg;
+                        ist.preset = eff.preset.empty() ? (ic + "-" + rw) : eff.preset;
                         n = 0;
-                        std::fprintf(stderr, "IOS reposition %s\n", cmd.arg.c_str());
+                        std::fprintf(stderr, "IOS reposition %s\n", ist.preset.c_str());
                     }
-                    // env changes go out on the next frame
+                    if (eff.have_state)
+                        ist.mode = "adapter";
                     count = 0;
                 } catch (const std::exception& ex) {
                     std::fprintf(stderr, "IOS %s: %s\n", cmd.op.c_str(), ex.what());
                 }
             }
+            if (live.active() && live.stale()) {
+                frozen = true;
+                live.clear();
+                std::fprintf(stderr, "IOS live-state timeout — frozen\n");
+            }
         }
         const double t = n * dt;
-        if (duration >= 0 && t > duration)
+        if (duration >= 0 && tick * dt > duration)
             break;
         fh::Frame f;
-        if (frozen && tick > 0) {
+        if (replay_src)
+            replay_src->set_time(n * dt);
+        if (live.active() && !live.stale() && !(frozen && tick > 0)) {
+            f = live.frame();
+            f.t = n * dt;
+            f.phase = "adapter";
+            f.wheel_agl_ft = f.alt_ft - fh::kEyeHeightFt - rwy.elev_ft;
+        } else if (frozen && tick > 0) {
             f = last;
             f.phase = "frozen";
         } else if (prof) {

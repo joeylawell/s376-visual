@@ -624,7 +624,7 @@ std::vector<std::uint16_t> build_lights(bool beacon, bool strobe, std::uint16_t 
 std::vector<std::uint16_t> build_env(float tod_hours, float visible_range_ft, int month, int day,
                                      int year, FloatFmt fmt, int tod_select, int precip_type,
                                      int precip_intensity, int lightning, float wind_mph,
-                                     float wind_dir) {
+                                     float wind_dir, int runway_condition) {
     std::uint16_t body[27] = {};
     body[0] = static_cast<std::uint16_t>(tod_select);
     body[2] = static_cast<std::uint16_t>(precip_type);
@@ -632,6 +632,7 @@ std::vector<std::uint16_t> build_env(float tod_hours, float visible_range_ft, in
     body[4] = static_cast<std::uint16_t>(month);
     body[5] = static_cast<std::uint16_t>(day);
     body[6] = static_cast<std::uint16_t>(year);
+    body[7] = static_cast<std::uint16_t>(runway_condition < 0 ? 0 : runway_condition);
     put_i32(body + 10, lightning);
     put_f32(body + 12, tod_hours, fmt);
     put_f32(body + 14, visible_range_ft, fmt);

@@ -8,9 +8,12 @@
 #include "s376/geo.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <fstream>
 #include <map>
@@ -549,6 +552,20 @@ void ManualFlight::reposition(const Runway& rwy, double start_nm, double gs_deg,
     pitch_ = on_runway ? 0.0 : 5.5 - gs_deg;
 }
 
+void ManualFlight::reposition_lla(double eye_lat, double eye_lon, double eye_alt_ft, double hdg_deg) {
+    lat_ = eye_lat;
+    lon_ = eye_lon;
+    alt_ = eye_alt_ft - kEyeHeightFt;
+    if (alt_ < rwy_.elev_ft)
+        alt_ = rwy_.elev_ft;
+    hdg_ = geo::wrap360(hdg_deg);
+    roll_ = 0;
+    vs_ = 0;
+    const double agl = alt_ - rwy_.elev_ft;
+    v_ = agl <= 0.01 ? 0.0 : 145.0;
+    pitch_ = agl <= 0.01 ? 0.0 : 2.5;
+}
+
 Frame ManualFlight::step(double dt, const Controls& c) {
     const double flapf = c.flaps >= 40 ? 0.95 : c.flaps >= 30 ? 1.0 : c.flaps >= 15 ? 1.2 : 1.6;
     const double drag_cfg = (c.flaps >= 40 ? 1.1 : c.flaps >= 30 ? 1.0 : c.flaps >= 15 ? 0.75 : 0.5) +
@@ -583,7 +600,8 @@ Frame ManualFlight::step(double dt, const Controls& c) {
         vs_ = 0;
     }
     const double turn = geo::rad2deg(32.174 * std::tan(geo::deg2rad(roll_)) / std::max(fps, 50.0));
-    hdg_ = geo::wrap360(hdg_ + turn * dt);
+    const double yaw = c.rudder * (ground ? 30.0 : 4.0);
+    hdg_ = geo::wrap360(hdg_ + (turn + yaw) * dt);
     const double hs = fps * std::cos(gamma);
     const double h = geo::deg2rad(hdg_);
     offset_ft(lat_, lon_, hs * std::cos(h) * dt, hs * std::sin(h) * dt);
@@ -605,6 +623,350 @@ Frame ManualFlight::step(double dt, const Controls& c) {
     f.strobe = true;
     f.phase = f.on_ground ? "ground" : "manual";
     return f;
+}
+
+// ================================================================= input map / cal / replay
+
+namespace {
+
+bool axis_unipolar(const std::string& src) {
+    return src == "lt" || src == "rt" || src == "xinput_lt" || src == "xinput_rt";
+}
+
+} // namespace
+
+double apply_axis(double raw_unit, const AxisCal& cal, bool unipolar) {
+    double x = raw_unit;
+    if (cal.invert)
+        x = unipolar ? (1.0 - x) : -x;
+    if (unipolar) {
+        const double lo = std::max(0.0, cal.deadzone);
+        if (x <= lo)
+            return 0;
+        const double span = 1.0 - lo;
+        return span > 1e-9 ? clampd((x - lo) / span, 0, 1) : 0;
+    }
+    const double d = x - cal.center;
+    if (std::fabs(d) < cal.deadzone)
+        return 0;
+    const double span = d >= 0 ? (cal.max - cal.center) : (cal.center - cal.min);
+    const double usable = span - cal.deadzone;
+    if (usable <= 1e-9)
+        return 0;
+    const double u = (d >= 0 ? 1.0 : -1.0) * (std::fabs(d) - cal.deadzone) / usable;
+    return clampd(u, -1, 1);
+}
+
+const double* raw_axis_ptr(const RawAxes& a, const std::string& name) {
+    const std::string n = lower(name);
+    if (n == "x")
+        return &a.x;
+    if (n == "y")
+        return &a.y;
+    if (n == "z" || n == "throttle")
+        return &a.z;
+    if (n == "rx" || n == "rudder")
+        return &a.rx;
+    if (n == "ry")
+        return &a.ry;
+    if (n == "rz")
+        return &a.rz;
+    if (n == "slider")
+        return &a.slider;
+    if (n == "lx" || n == "xinput_lx")
+        return &a.lx;
+    if (n == "ly" || n == "xinput_ly")
+        return &a.ly;
+    if (n == "xirx" || n == "xinput_rx")
+        return &a.xirx;
+    if (n == "xiry" || n == "xinput_ry")
+        return &a.xiry;
+    if (n == "lt" || n == "xinput_lt")
+        return &a.lt;
+    if (n == "rt" || n == "xinput_rt")
+        return &a.rt;
+    if (n == "hatx")
+        return &a.hatx;
+    if (n == "haty")
+        return &a.haty;
+    return nullptr;
+}
+
+void apply_input_map(const InputMap& m, const RawAxes& raw, Controls& c, std::uint32_t& prev_buttons) {
+    auto one = [&](const std::string& src, const AxisCal& cal) -> double {
+        const double* p = raw_axis_ptr(raw, src);
+        if (!p)
+            return 0;
+        const bool uni = axis_unipolar(src);
+        return apply_axis(*p, cal, uni);
+    };
+    c.aileron = one(m.aileron_src, m.aileron);
+    c.elevator = one(m.elevator_src, m.elevator);
+    c.rudder = one(m.rudder_src, m.rudder);
+    double th = one(m.throttle_src, m.throttle);
+    if (!axis_unipolar(m.throttle_src))
+        th = (th + 1.0) * 0.5;
+    c.throttle = clampd(th, 0, 1);
+    auto rising = [&](int bit) -> bool {
+        if (bit < 0 || bit > 31)
+            return false;
+        const std::uint32_t msk = 1u << bit;
+        return (raw.buttons & msk) && !(prev_buttons & msk);
+    };
+    if (rising(m.btn_gear))
+        c.gear_down = !c.gear_down;
+    if (rising(m.btn_flaps))
+        c.flaps = c.flaps == 30 ? 40 : c.flaps == 40 ? 0 : c.flaps == 0 ? 15 : 30;
+    if (rising(m.btn_lights))
+        c.lights = !c.lights;
+    prev_buttons = raw.buttons;
+}
+
+void cal_note(AxisCal& cal, double raw_unit) {
+    if (!cal.seeded) {
+        cal.min = cal.max = raw_unit;
+        cal.seeded = true;
+        return;
+    }
+    cal.min = std::min(cal.min, raw_unit);
+    cal.max = std::max(cal.max, raw_unit);
+}
+
+void cal_finish(AxisCal& cal) {
+    if (!cal.seeded)
+        return;
+    cal.center = 0.5 * (cal.min + cal.max);
+    if (std::fabs(cal.center) < 0.15)
+        cal.center = 0;
+}
+
+namespace {
+
+void toml_put_axis(std::ostringstream& o, const char* name, const std::string& src, const AxisCal& c) {
+    o << "[axis." << name << "]\n";
+    o << "source = \"" << src << "\"\n";
+    o << "invert = " << (c.invert ? "true" : "false") << "\n";
+    o << "deadzone = " << c.deadzone << "\n";
+    o << "min = " << c.min << "\n";
+    o << "max = " << c.max << "\n";
+    o << "center = " << c.center << "\n";
+}
+
+} // namespace
+
+std::string format_input_map_toml(const InputMap& m) {
+    std::ostringstream o;
+    o << "# s376-fakehost USB yoke / throttle / pedals mapping\n";
+    o << "# Raw axes are -1..1 from winmm, XInput, evdev or SDL2.\n\n";
+    toml_put_axis(o, "aileron", m.aileron_src, m.aileron);
+    o << "\n";
+    toml_put_axis(o, "elevator", m.elevator_src, m.elevator);
+    o << "\n";
+    toml_put_axis(o, "rudder", m.rudder_src, m.rudder);
+    o << "\n";
+    toml_put_axis(o, "throttle", m.throttle_src, m.throttle);
+    o << "\n[button]\n";
+    o << "gear = " << m.btn_gear << "\n";
+    o << "flaps = " << m.btn_flaps << "\n";
+    o << "lights = " << m.btn_lights << "\n";
+    return o.str();
+}
+
+InputMap parse_input_map_toml(const std::string& text) {
+    InputMap m;
+    m.elevator.invert = true;
+    m.throttle.invert = true;
+    std::string section;
+    std::istringstream in(text);
+    std::string line;
+    auto unquote = [](std::string s) {
+        s = trim(s);
+        if (s.size() >= 2 && ((s.front() == '"' && s.back() == '"') ||
+                              (s.front() == '\'' && s.back() == '\'')))
+            return s.substr(1, s.size() - 2);
+        return s;
+    };
+    auto as_bool = [](const std::string& s) {
+        return s == "true" || s == "1" || s == "yes";
+    };
+    while (std::getline(in, line)) {
+        const auto hash = line.find('#');
+        if (hash != std::string::npos)
+            line = line.substr(0, hash);
+        line = trim(line);
+        if (line.empty())
+            continue;
+        if (line.front() == '[' && line.back() == ']') {
+            section = lower(trim(line.substr(1, line.size() - 2)));
+            continue;
+        }
+        const auto eq = line.find('=');
+        if (eq == std::string::npos)
+            continue;
+        const std::string key = lower(trim(line.substr(0, eq)));
+        const std::string val = unquote(line.substr(eq + 1));
+        AxisCal* cal = nullptr;
+        std::string* src = nullptr;
+        if (section == "axis.aileron" || section == "aileron") {
+            cal = &m.aileron;
+            src = &m.aileron_src;
+        } else if (section == "axis.elevator" || section == "elevator") {
+            cal = &m.elevator;
+            src = &m.elevator_src;
+        } else if (section == "axis.rudder" || section == "rudder") {
+            cal = &m.rudder;
+            src = &m.rudder_src;
+        } else if (section == "axis.throttle" || section == "throttle") {
+            cal = &m.throttle;
+            src = &m.throttle_src;
+        }
+        if (cal && src) {
+            if (key == "source" || key == "src" || key == "axis")
+                *src = lower(val);
+            else if (key == "invert")
+                cal->invert = as_bool(val);
+            else if (key == "deadzone")
+                cal->deadzone = std::strtod(val.c_str(), nullptr);
+            else if (key == "min")
+                cal->min = std::strtod(val.c_str(), nullptr);
+            else if (key == "max")
+                cal->max = std::strtod(val.c_str(), nullptr);
+            else if (key == "center")
+                cal->center = std::strtod(val.c_str(), nullptr);
+            continue;
+        }
+        if (section == "button" || section == "buttons") {
+            const int b = std::atoi(val.c_str());
+            if (key == "gear")
+                m.btn_gear = b;
+            else if (key == "flaps")
+                m.btn_flaps = b;
+            else if (key == "lights")
+                m.btn_lights = b;
+        }
+    }
+    return m;
+}
+
+InputMap load_input_map(const std::string& path) {
+    std::ifstream in(path);
+    if (!in)
+        throw std::runtime_error("input map: cannot read " + path);
+    std::ostringstream ss;
+    ss << in.rdbuf();
+    return parse_input_map_toml(ss.str());
+}
+
+void save_input_map(const std::string& path, const InputMap& m) {
+    std::ofstream out(path);
+    if (!out)
+        throw std::runtime_error("input map: cannot write " + path);
+    out << format_input_map_toml(m);
+}
+
+ReplayControlSource::ReplayControlSource(std::vector<double> t, std::vector<Controls> c)
+    : t_(std::move(t)), c_(std::move(c)) {
+    if (t_.size() != c_.size() || t_.empty())
+        throw std::runtime_error("controls replay: empty or mismatched");
+    for (std::size_t i = 1; i < t_.size(); ++i) {
+        if (!(t_[i] > t_[i - 1]))
+            throw std::runtime_error("controls replay: timestamps must increase");
+    }
+}
+
+ReplayControlSource ReplayControlSource::from_csv(const std::string& text) {
+    std::vector<double> ts;
+    std::vector<Controls> cs;
+    std::istringstream in(text);
+    std::string line;
+    bool header = true;
+    while (std::getline(in, line)) {
+        line = trim(line);
+        if (line.empty() || line[0] == '#')
+            continue;
+        if (header) {
+            header = false;
+            if (lower(line).find("elevator") != std::string::npos)
+                continue;
+        }
+        std::stringstream ss(line);
+        std::string cell;
+        std::vector<std::string> cols;
+        while (std::getline(ss, cell, ','))
+            cols.push_back(trim(cell));
+        if (cols.size() < 4)
+            throw std::runtime_error("controls replay: need t,elevator,aileron,throttle");
+        Controls c;
+        ts.push_back(std::strtod(cols[0].c_str(), nullptr));
+        c.elevator = std::strtod(cols[1].c_str(), nullptr);
+        c.aileron = std::strtod(cols[2].c_str(), nullptr);
+        c.throttle = std::strtod(cols[3].c_str(), nullptr);
+        if (cols.size() > 4)
+            c.rudder = std::strtod(cols[4].c_str(), nullptr);
+        if (cols.size() > 5)
+            c.gear_down = cols[5] == "1" || lower(cols[5]) == "true";
+        if (cols.size() > 6)
+            c.flaps = std::atoi(cols[6].c_str());
+        if (cols.size() > 7)
+            c.lights = cols[7] != "0" && lower(cols[7]) != "false";
+        cs.push_back(c);
+    }
+    return ReplayControlSource(std::move(ts), std::move(cs));
+}
+
+ReplayControlSource ReplayControlSource::load(const std::string& path) {
+    std::ifstream in(path);
+    if (!in)
+        throw std::runtime_error("controls replay: cannot read " + path);
+    std::ostringstream ss;
+    ss << in.rdbuf();
+    return from_csv(ss.str());
+}
+
+void ReplayControlSource::poll(Controls& c) {
+    if (t_.empty())
+        return;
+    if (now_ <= t_.front()) {
+        c = c_.front();
+        return;
+    }
+    if (now_ >= t_.back()) {
+        c = c_.back();
+        return;
+    }
+    std::size_t i = 1;
+    while (i < t_.size() && t_[i] < now_)
+        ++i;
+    const double u = (now_ - t_[i - 1]) / (t_[i] - t_[i - 1]);
+    const Controls& a = c_[i - 1];
+    const Controls& b = c_[i];
+    c.elevator = a.elevator + (b.elevator - a.elevator) * u;
+    c.aileron = a.aileron + (b.aileron - a.aileron) * u;
+    c.rudder = a.rudder + (b.rudder - a.rudder) * u;
+    c.throttle = a.throttle + (b.throttle - a.throttle) * u;
+    c.gear_down = u < 0.5 ? a.gear_down : b.gear_down;
+    c.flaps = u < 0.5 ? a.flaps : b.flaps;
+    c.lights = u < 0.5 ? a.lights : b.lights;
+}
+
+bool ReplayControlSource::done() const { return !t_.empty() && now_ >= t_.back(); }
+
+void LiveStateFeed::push(const Frame& f) {
+    f_ = f;
+    active_ = true;
+    last_ = std::chrono::steady_clock::now();
+}
+
+bool LiveStateFeed::stale() const {
+    if (!active_)
+        return false;
+    const auto age = std::chrono::duration<double>(std::chrono::steady_clock::now() - last_).count();
+    return age > timeout_s_;
+}
+
+void LiveStateFeed::clear() {
+    active_ = false;
+    f_ = Frame{};
 }
 
 // ================================================================= IOS
@@ -631,6 +993,218 @@ bool parse_preset(const std::string& p_in, std::string& icao, std::string& rwy, 
     return !icao.empty() && !rwy.empty();
 }
 
+namespace {
+
+bool ios_op_known(const std::string& op) {
+    static const char* ok[] = {"reposition", "freeze", "unfreeze", "tod", "vis", "wind",
+                               "ceiling",    "rvr",    "weather",  "lights", "cloud",
+                               "state",      "quit",   "rwy-cond", "rwy_cond",
+                               "runway_condition", nullptr};
+    for (int i = 0; ok[i]; ++i)
+        if (op == ok[i])
+            return true;
+    return false;
+}
+
+int clamp_rwy_cond(int v) { return v < 0 ? 0 : v; }
+
+int clamp_step(int s) { return s < 0 ? 0 : s > 5 ? 5 : s; }
+
+bool json_find(const std::string& s, const char* key, std::size_t& valpos) {
+    const std::string q = std::string("\"") + key + "\"";
+    std::size_t i = 0;
+    while ((i = s.find(q, i)) != std::string::npos) {
+        std::size_t j = i + q.size();
+        while (j < s.size() && std::isspace(static_cast<unsigned char>(s[j])))
+            ++j;
+        if (j < s.size() && s[j] == ':') {
+            ++j;
+            while (j < s.size() && std::isspace(static_cast<unsigned char>(s[j])))
+                ++j;
+            valpos = j;
+            return true;
+        }
+        i += q.size();
+    }
+    return false;
+}
+
+bool json_string(const std::string& s, const char* key, std::string& out) {
+    std::size_t i = 0;
+    if (!json_find(s, key, i) || i >= s.size() || s[i] != '"')
+        return false;
+    ++i;
+    out.clear();
+    for (; i < s.size(); ++i) {
+        if (s[i] == '\\' && i + 1 < s.size()) {
+            out += s[i + 1];
+            ++i;
+            continue;
+        }
+        if (s[i] == '"')
+            return true;
+        out += s[i];
+    }
+    return false;
+}
+
+bool json_number(const std::string& s, const char* key, double& out) {
+    std::size_t i = 0;
+    if (!json_find(s, key, i))
+        return false;
+    char* end = nullptr;
+    const double v = std::strtod(s.c_str() + i, &end);
+    if (end == s.c_str() + i)
+        return false;
+    out = v;
+    return true;
+}
+
+bool json_bool(const std::string& s, const char* key, bool& out) {
+    std::size_t i = 0;
+    if (!json_find(s, key, i))
+        return false;
+    if (s.compare(i, 4, "true") == 0) {
+        out = true;
+        return true;
+    }
+    if (s.compare(i, 5, "false") == 0) {
+        out = false;
+        return true;
+    }
+    if (s[i] == '1') {
+        out = true;
+        return true;
+    }
+    if (s[i] == '0') {
+        out = false;
+        return true;
+    }
+    return false;
+}
+
+void fill_ios_from_json(IosCommand& c, const std::string& body) {
+    std::string s;
+    double n = 0;
+    bool b = false;
+    if (json_string(body, "preset", s) || json_string(body, "arg", s))
+        c.arg = s;
+    if (json_string(body, "icao", s)) {
+        c.icao = s;
+        c.have_runway = true;
+    }
+    if (json_string(body, "runway", s) || json_string(body, "rwy", s)) {
+        c.runway = s;
+        c.have_runway = true;
+    }
+    if (json_string(body, "distance", s)) {
+        try {
+            c.distance_nm = parse_distance_nm(s);
+        } catch (...) {
+            c.distance_nm = 0;
+        }
+    }
+    if (json_number(body, "lat", n)) {
+        c.lat = n;
+        c.have_lla = true;
+    }
+    if (json_number(body, "lon", n)) {
+        c.lon = n;
+        c.have_lla = true;
+    }
+    if (json_number(body, "alt_ft", n)) {
+        c.alt_ft = n;
+        c.have_lla = true;
+    }
+    if (json_number(body, "hdg", n) || json_number(body, "heading", n)) {
+        c.hdg = n;
+        c.have_lla = true;
+    }
+    if (json_bool(body, "on_runway", b))
+        c.on_runway = b;
+    if (json_number(body, "hours", n) || json_number(body, "tod", n) || json_number(body, "tod_hours", n)) {
+        c.tod_hours = static_cast<float>(n);
+        c.have_tod = true;
+    }
+    if (json_number(body, "vis_sm", n) || json_number(body, "vis", n)) {
+        c.vis_sm = static_cast<float>(n);
+        c.have_vis = true;
+    }
+    if (json_number(body, "wind_dir", n)) {
+        c.wind_dir = static_cast<float>(n);
+        c.have_wind = true;
+    }
+    if (json_number(body, "wind_mph", n)) {
+        c.wind_mph = static_cast<float>(n);
+        c.have_wind = true;
+    }
+    if (json_number(body, "ceiling_ft", n) || json_number(body, "ceiling", n)) {
+        c.ceiling_ft = static_cast<float>(n);
+        c.have_ceiling = true;
+    }
+    if (json_number(body, "cloud_top_ft", n) || json_number(body, "top_ft", n)) {
+        c.cloud_top_ft = static_cast<float>(n);
+        c.have_cloud_top = true;
+    }
+    if (json_number(body, "upper_ceiling_ft", n)) {
+        c.upper_ceiling_ft = static_cast<float>(n);
+        c.have_upper = true;
+    }
+    if (json_number(body, "upper_top_ft", n)) {
+        c.upper_top_ft = static_cast<float>(n);
+        c.have_upper = true;
+    }
+    if (json_number(body, "rvr_ft", n) || json_number(body, "rvr", n)) {
+        c.rvr_ft = static_cast<float>(n);
+        c.have_rvr = true;
+    }
+    if (json_number(body, "precip_type", n)) {
+        c.precip_type = static_cast<int>(n);
+        c.have_precip = true;
+    }
+    if (json_number(body, "precip_intensity", n)) {
+        c.precip_intensity = static_cast<int>(n);
+        c.have_precip = true;
+    }
+    if (json_number(body, "rwy_cond", n) || json_number(body, "runway_condition", n) ||
+        json_number(body, "condition", n)) {
+        c.rwy_cond = clamp_rwy_cond(static_cast<int>(n));
+        c.have_rwy_cond = true;
+    }
+    if (json_number(body, "step", n) || json_number(body, "light_step", n))
+        c.light_step = clamp_step(static_cast<int>(n));
+    if (json_number(body, "runway", n) && c.op == "lights")
+        c.rwy_light = clamp_step(static_cast<int>(n));
+    if (json_number(body, "approach", n))
+        c.apch_light = clamp_step(static_cast<int>(n));
+    if (json_number(body, "environment", n))
+        c.env_light = clamp_step(static_cast<int>(n));
+    if (c.light_step >= 0 || c.rwy_light >= 0 || c.apch_light >= 0 || c.env_light >= 0)
+        c.have_lights = true;
+    if (json_number(body, "pitch", n))
+        c.pitch = n;
+    if (json_number(body, "roll", n))
+        c.roll = n;
+    if (json_number(body, "gs_kt", n) || json_number(body, "gs", n))
+        c.gs_kt = n;
+    if (json_bool(body, "gear_down", b) || json_bool(body, "gear", b)) {
+        c.gear_down = b;
+        c.have_gear = true;
+    }
+    if (json_number(body, "flaps", n))
+        c.flaps = static_cast<int>(n);
+    if (json_number(body, "timeout_s", n))
+        c.timeout_s = n;
+    if (json_bool(body, "frozen", b)) {
+        c.have_frozen = true;
+        c.frozen = b;
+    }
+    if (c.op == "state")
+        c.have_state = true;
+}
+
+} // namespace
+
 IosCommand parse_ios_query(const std::string& target) {
     IosCommand c;
     const auto q = target.find('?');
@@ -652,14 +1226,181 @@ IosCommand parse_ios_query(const std::string& target) {
         if (k == "op") c.op = lower(dec);
         else if (k == "arg") c.arg = dec;
     }
-    static const char* ok[] = {"reposition", "freeze", "unfreeze", "tod", "vis", "wind",
-                               "ceiling", "rvr", "quit", nullptr};
-    bool known = false;
-    for (int i = 0; ok[i]; ++i)
-        known |= c.op == ok[i];
-    if (!known)
+    if (!ios_op_known(c.op))
         c.op.clear();
     return c;
+}
+
+IosCommand parse_ios_json(const std::string& path_in, const std::string& body) {
+    IosCommand c;
+    std::string path = path_in;
+    const auto q = path.find('?');
+    if (q != std::string::npos)
+        path = path.substr(0, q);
+    if (!path.empty() && path.back() == '/' && path.size() > 1)
+        path.pop_back();
+    const std::string prefix = "/api/v1/";
+    if (path.rfind(prefix, 0) != 0)
+        return c;
+    c.op = lower(path.substr(prefix.size()));
+    if (!ios_op_known(c.op)) {
+        c.op.clear();
+        return c;
+    }
+    fill_ios_from_json(c, body);
+    if (c.op == "freeze" && c.have_frozen && !c.frozen)
+        c.op = "unfreeze";
+    return c;
+}
+
+std::string ios_status_json(const IosStatus& st) {
+    char buf[1600];
+    std::snprintf(
+        buf, sizeof(buf),
+        "{\"ok\":true,\"mode\":\"%s\",\"preset\":\"%s\",\"phase\":\"%s\",\"frozen\":%s,"
+        "\"t\":%.3f,\"lat\":%.8f,\"lon\":%.8f,\"alt_ft\":%.2f,\"hdg\":%.3f,\"pitch\":%.3f,"
+        "\"roll\":%.3f,\"gs_kt\":%.2f,\"wheel_agl_ft\":%.2f,\"gear_down\":%s,\"flaps\":%d,"
+        "\"hat_replies\":%d,\"last_hat_ft\":%.2f,\"contacts\":%d,\"tod_hours\":%.3f,"
+        "\"vis_sm\":%.3f,\"wind_dir\":%.1f,\"wind_mph\":%.1f,\"ceiling_ft\":%.1f,"
+        "\"cloud_top_ft\":%.1f,\"upper_ceiling_ft\":%.1f,\"upper_top_ft\":%.1f,\"rvr_ft\":%.1f,"
+        "\"rwy_cond\":%d,"
+        "\"lights\":{\"step\":%d,\"runway\":%d,\"approach\":%d,\"environment\":%d}}",
+        st.mode.c_str(), st.preset.c_str(), st.phase.c_str(), st.frozen ? "true" : "false", st.t,
+        st.lat, st.lon, st.alt, st.hdg, st.pitch, st.roll, st.gs_kt, st.wheel_agl,
+        st.gear_down ? "true" : "false", st.flaps, st.hat_replies, st.last_hat, st.contacts,
+        st.tod_hours, st.vis_sm, st.wind_dir, st.wind_mph, st.ceiling_ft, st.cloud_top_ft,
+        st.upper_ceiling_ft, st.upper_top_ft, st.rvr_ft, st.rwy_cond, st.light_step, st.rwy_light,
+        st.apch_light, st.env_light);
+    return buf;
+}
+
+IosEffect apply_ios_command(const IosCommand& cmd, Environment& env, LiveStateFeed* live) {
+    IosEffect e;
+    if (cmd.op == "quit")
+        e.quit = true;
+    else if (cmd.op == "freeze") {
+        e.set_frozen = true;
+        e.frozen = true;
+    } else if (cmd.op == "unfreeze") {
+        e.set_frozen = true;
+        e.frozen = false;
+        if (live)
+            live->clear();
+    } else if (cmd.op == "tod" || cmd.have_tod) {
+        if (cmd.have_tod)
+            env.tod_hours = cmd.tod_hours;
+        else if (!cmd.arg.empty())
+            env.tod_hours = std::stof(cmd.arg);
+    }
+    if (cmd.op == "vis" || cmd.have_vis) {
+        if (cmd.have_vis)
+            env.vis_ft = cmd.vis_sm * 5280.f;
+        else if (!cmd.arg.empty())
+            env.vis_ft = std::stof(cmd.arg) * 5280.f;
+    }
+    if (cmd.op == "wind" || cmd.have_wind) {
+        if (cmd.have_wind) {
+            env.wind_dir = cmd.wind_dir;
+            env.wind_mph = cmd.wind_mph;
+        } else if (!cmd.arg.empty()) {
+            const auto sl = cmd.arg.find('/');
+            env.wind_dir = std::stof(cmd.arg.substr(0, sl));
+            env.wind_mph = sl == std::string::npos ? 0 : std::stof(cmd.arg.substr(sl + 1));
+        }
+    }
+    if (cmd.op == "ceiling" || cmd.have_ceiling) {
+        if (cmd.have_ceiling)
+            env.ceiling_ft_msl = cmd.ceiling_ft;
+        else if (!cmd.arg.empty())
+            env.ceiling_ft_msl = std::stof(cmd.arg);
+    }
+    if (cmd.have_cloud_top)
+        env.cloud_top_ft_msl = cmd.cloud_top_ft;
+    if (cmd.have_upper) {
+        env.upper_ceiling_ft_msl = cmd.upper_ceiling_ft;
+        env.upper_top_ft_msl = cmd.upper_top_ft;
+    }
+    if (cmd.op == "rvr" || cmd.have_rvr) {
+        if (cmd.have_rvr)
+            env.rvr_ft = cmd.rvr_ft;
+        else if (!cmd.arg.empty())
+            env.rvr_ft = std::stof(cmd.arg);
+        if (env.rvr_ft > 0)
+            env.fog_top_ft = 300;
+    }
+    if (cmd.have_precip) {
+        env.precip_type = cmd.precip_type;
+        env.precip_intensity = cmd.precip_intensity;
+    }
+    if (cmd.op == "rwy-cond" || cmd.op == "rwy_cond" || cmd.op == "runway_condition" ||
+        cmd.have_rwy_cond) {
+        if (cmd.have_rwy_cond)
+            env.runway_condition = clamp_rwy_cond(cmd.rwy_cond);
+        else if (!cmd.arg.empty())
+            env.runway_condition = clamp_rwy_cond(std::atoi(cmd.arg.c_str()));
+    }
+    if (cmd.op == "lights" && !cmd.have_lights && !cmd.arg.empty()) {
+        const int step = clamp_step(std::atoi(cmd.arg.c_str()));
+        env.light_step = env.rwy_light_step = env.apch_light_step = env.env_light_step = step;
+    }
+    if (cmd.have_lights) {
+        if (cmd.light_step >= 0) {
+            env.light_step = cmd.light_step;
+            if (cmd.rwy_light < 0)
+                env.rwy_light_step = cmd.light_step;
+            if (cmd.apch_light < 0)
+                env.apch_light_step = cmd.light_step;
+            if (cmd.env_light < 0)
+                env.env_light_step = cmd.light_step;
+        }
+        if (cmd.rwy_light >= 0)
+            env.rwy_light_step = cmd.rwy_light;
+        if (cmd.apch_light >= 0)
+            env.apch_light_step = cmd.apch_light;
+        if (cmd.env_light >= 0)
+            env.env_light_step = cmd.env_light;
+    }
+    if (cmd.op == "reposition") {
+        if (cmd.have_lla && !(cmd.lat == 0 && cmd.lon == 0 && cmd.alt_ft == 0)) {
+            e.reposition_lla = true;
+            e.lat = cmd.lat;
+            e.lon = cmd.lon;
+            e.alt_ft = cmd.alt_ft;
+            e.hdg = cmd.hdg;
+        } else if (cmd.have_runway && !cmd.icao.empty() && !cmd.runway.empty()) {
+            e.reposition = true;
+            e.icao = cmd.icao;
+            e.runway = cmd.runway;
+            e.start_nm = cmd.distance_nm;
+            e.on_runway = cmd.on_runway;
+            e.preset = lower(cmd.icao) + "-" + lower(cmd.runway) +
+                       (cmd.on_runway ? "-rwy" : "");
+        } else if (!cmd.arg.empty()) {
+            e.reposition = true;
+            e.preset = cmd.arg;
+        }
+    }
+    if (cmd.op == "state" && cmd.have_state) {
+        e.have_state = true;
+        e.state.lat = cmd.lat;
+        e.state.lon = cmd.lon;
+        e.state.alt_ft = cmd.alt_ft;
+        e.state.hdg = cmd.hdg;
+        e.state.pitch = cmd.pitch;
+        e.state.roll = cmd.roll;
+        e.state.gs_kt = cmd.gs_kt;
+        e.state.gear_down = cmd.have_gear ? cmd.gear_down : true;
+        e.state.flaps = cmd.flaps >= 0 ? cmd.flaps : 30;
+        e.state.phase = "adapter";
+        e.state.landing_mask = 0x7F;
+        e.state.strobe = true;
+        if (live) {
+            if (cmd.timeout_s > 0)
+                live->set_timeout(cmd.timeout_s);
+            live->push(e.state);
+        }
+    }
+    return e;
 }
 
 std::string ios_page() {
@@ -667,6 +1408,7 @@ std::string ios_page() {
 <style>body{font-family:sans-serif;background:#111;color:#ddd}button{margin:3px;padding:8px}
 #st{white-space:pre;font-family:monospace;background:#222;padding:8px}</style></head><body>
 <h3>s376-fakehost IOS (loopback)</h3>
+<p>JSON API: <a href="/api/v1/status">GET /api/v1/status</a> — see docs/FAKEHOST_API.md</p>
 <div>Reposition:
 <button onclick="c('reposition','kjfk-04r-6nm')">04R 6 nm final</button>
 <button onclick="c('reposition','kjfk-04r-6sm')">04R 6 sm final</button>
@@ -679,107 +1421,218 @@ std::string ios_page() {
 Vis sm <input id=vis size=4 value=10><button onclick="c('vis',v('vis'))">set</button>
 Wind dir/mph <input id=wind size=6 value=040/10><button onclick="c('wind',v('wind'))">set</button>
 Ceiling ft MSL <input id=ceil size=5 value=-1><button onclick="c('ceiling',v('ceil'))">set</button>
-RVR ft <input id=rvr size=5 value=-1><button onclick="c('rvr',v('rvr'))">set</button></div>
+RVR ft <input id=rvr size=5 value=-1><button onclick="c('rvr',v('rvr'))">set</button>
+Lights 0-5 <input id=lit size=2 value=5><button onclick="c('lights',v('lit'))">set</button>
+Rwy cond 0 dry / 1 damp / 2 wet / 3+ flooded <input id=rwy size=2 value=0>
+<button onclick="c('rwy-cond',v('rwy'))">set</button></div>
 <div id=st></div>
 <script>function v(i){return document.getElementById(i).value}
 function c(op,arg){fetch('/cmd?op='+op+'&arg='+encodeURIComponent(arg)).then(r=>r.text()).then(t=>st.textContent=t)}
-setInterval(()=>fetch('/status').then(r=>r.text()).then(t=>st.textContent=t),1000)</script>
+setInterval(()=>fetch('/api/v1/status').then(r=>r.text()).then(t=>st.textContent=t),1000)</script>
 </body></html>)HTML";
 }
 
-IosServer::~IosServer() {
-#ifndef _WIN32
-    if (fd_ >= 0)
-        ::close(fd_);
+namespace {
+
+#ifdef _WIN32
+using IosSock = SOCKET;
+constexpr IosSock kIosInvalid = INVALID_SOCKET;
+void ios_close(IosSock s) {
+    if (s != kIosInvalid)
+        closesocket(s);
+}
+void ios_ensure_wsa() {
+    static bool once = false;
+    if (once)
+        return;
+    WSADATA wsa{};
+    if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0)
+        throw std::runtime_error("IOS: WSAStartup failed");
+    once = true;
+}
+void ios_nonblock(IosSock s) {
+    u_long nb = 1;
+    ioctlsocket(s, FIONBIO, &nb);
+}
+void ios_recv_timeout(IosSock s) {
+    DWORD tv = 200;
+    setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&tv), sizeof(tv));
+}
+int ios_send_all(IosSock s, const std::string& r) {
+    return ::send(s, r.data(), static_cast<int>(r.size()), 0);
+}
+#else
+using IosSock = int;
+constexpr IosSock kIosInvalid = -1;
+void ios_close(IosSock s) {
+    if (s >= 0)
+        ::close(s);
+}
+void ios_ensure_wsa() {}
+void ios_nonblock(IosSock s) { fcntl(s, F_SETFL, fcntl(s, F_GETFL) | O_NONBLOCK); }
+void ios_recv_timeout(IosSock s) {
+    timeval tv{0, 200000};
+    setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+}
+int ios_send_all(IosSock s, const std::string& r) {
+    return ::send(s, r.data(), r.size(), MSG_NOSIGNAL);
+}
 #endif
+
+IosSock ios_as(std::intptr_t fd) { return static_cast<IosSock>(fd); }
+
+bool ios_read_request(IosSock c, std::string& method, std::string& target, std::string& body) {
+    std::string req;
+    char buf[2048];
+    for (int i = 0; i < 8; ++i) {
+#ifdef _WIN32
+        const int n = ::recv(c, buf, sizeof(buf), 0);
+#else
+        const auto n = ::recv(c, buf, sizeof(buf), 0);
+#endif
+        if (n <= 0)
+            break;
+        req.append(buf, static_cast<std::size_t>(n));
+        if (req.find("\r\n\r\n") != std::string::npos)
+            break;
+    }
+    if (req.empty())
+        return false;
+    std::istringstream rs(req);
+    rs >> method >> target;
+    const auto hdr_end = req.find("\r\n\r\n");
+    body.clear();
+    std::size_t want = 0;
+    const auto cl = req.find("Content-Length:");
+    if (cl != std::string::npos)
+        want = static_cast<std::size_t>(std::atoi(req.c_str() + cl + 15));
+    if (hdr_end != std::string::npos)
+        body = req.substr(hdr_end + 4);
+    while (body.size() < want) {
+#ifdef _WIN32
+        const int n = ::recv(c, buf, sizeof(buf), 0);
+#else
+        const auto n = ::recv(c, buf, sizeof(buf), 0);
+#endif
+        if (n <= 0)
+            break;
+        body.append(buf, static_cast<std::size_t>(n));
+    }
+    return true;
+}
+
+void ios_reply(IosSock c, int code, const std::string& type, const std::string& body) {
+    const char* reason = code == 200 ? "OK" : code == 400 ? "Bad Request" : "Not Found";
+    std::string resp = "HTTP/1.0 " + std::to_string(code) + " " + reason +
+                       "\r\nContent-Type: " + type +
+                       "\r\nCache-Control: no-store\r\nAccess-Control-Allow-Origin: *\r\n"
+                       "Content-Length: " +
+                       std::to_string(body.size()) + "\r\n\r\n" + body;
+    (void)ios_send_all(c, resp);
+}
+
+} // namespace
+
+IosServer::~IosServer() {
+    if (fd_ != -1)
+        ios_close(ios_as(fd_));
+    fd_ = -1;
 }
 
 void IosServer::start(const std::string& bind_spec) {
-#ifndef _WIN32
+    ios_ensure_wsa();
     std::string h;
     std::uint16_t p = 0;
     parse_guarded(bind_spec, h, p, "IOS bind");
     if (h.find(':') != std::string::npos)
         throw std::runtime_error("IOS: use 127.0.0.1");
-    fd_ = ::socket(AF_INET, SOCK_STREAM, 0);
+#ifdef _WIN32
+    IosSock s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+#else
+    IosSock s = ::socket(AF_INET, SOCK_STREAM, 0);
+#endif
+    if (s == kIosInvalid)
+        throw std::runtime_error("IOS socket failed");
     int one = 1;
-    setsockopt(fd_, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
+#ifdef _WIN32
+    setsockopt(s, SOL_SOCKET, SO_REUSEADDR, reinterpret_cast<const char*>(&one), sizeof(one));
+#else
+    setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
+#endif
     sockaddr_in a{};
     a.sin_family = AF_INET;
     a.sin_port = htons(p);
     inet_pton(AF_INET, h.c_str(), &a.sin_addr);
     guard_sockaddr(&a, sizeof(a), "IOS bind");
-    if (::bind(fd_, reinterpret_cast<sockaddr*>(&a), sizeof(a)) != 0 || ::listen(fd_, 8) != 0)
+    if (::bind(s, reinterpret_cast<sockaddr*>(&a), sizeof(a)) != 0 || ::listen(s, 8) != 0) {
+        ios_close(s);
         throw std::runtime_error("IOS bind failed on " + bind_spec);
-    fcntl(fd_, F_SETFL, fcntl(fd_, F_GETFL) | O_NONBLOCK);
+    }
+    ios_nonblock(s);
     socklen_t l = sizeof(a);
-    getsockname(fd_, reinterpret_cast<sockaddr*>(&a), &l);
+    getsockname(s, reinterpret_cast<sockaddr*>(&a), &l);
     port_ = ntohs(a.sin_port);
-#else
-    (void)bind_spec;
-    throw std::runtime_error("IOS server: POSIX only for now");
-#endif
+    fd_ = static_cast<std::intptr_t>(s);
 }
 
 std::vector<IosCommand> IosServer::poll(const IosStatus& st) {
     std::vector<IosCommand> out;
-#ifndef _WIN32
-    if (fd_ < 0)
+    if (fd_ == -1)
         return out;
+    const IosSock ls = ios_as(fd_);
     for (int k = 0; k < 8; ++k) {
         sockaddr_in from{};
         socklen_t fl = sizeof(from);
-        const int c = ::accept(fd_, reinterpret_cast<sockaddr*>(&from), &fl);
-        if (c < 0)
+        const IosSock c = ::accept(ls, reinterpret_cast<sockaddr*>(&from), &fl);
+        if (c == kIosInvalid)
             break;
         try {
             guard_sockaddr(&from, fl, "IOS client");
         } catch (const Refused&) {
-            ::close(c);
+            ios_close(c);
             continue;
         }
-        timeval tv{0, 200000};
-        setsockopt(c, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
-        char buf[2048];
-        const auto n = ::recv(c, buf, sizeof(buf) - 1, 0);
-        std::string req = n > 0 ? std::string(buf, static_cast<std::size_t>(n)) : "";
-        std::string target;
-        {
-            std::istringstream rs(req);
-            std::string method;
-            rs >> method >> target;
+        ios_recv_timeout(c);
+        std::string method, target, req_body;
+        if (!ios_read_request(c, method, target, req_body)) {
+            ios_close(c);
+            continue;
         }
-        std::string body, type = "text/plain";
-        char sb[512];
+        const std::string path_only = target.substr(0, target.find('?'));
+        char sb[640];
         std::snprintf(sb, sizeof(sb),
                       "mode=%s preset=%s phase=%s frozen=%d t=%.1f\nlat=%.6f lon=%.6f alt=%.0fft "
                       "wheel_agl=%.0fft gs=%.0fkt\nhat_replies=%d last_hat=%.1fft contacts=%d\n",
-                      st.mode.c_str(), st.preset.c_str(), st.phase.c_str(), st.frozen ? 1 : 0,
-                      st.t, st.lat, st.lon, st.alt, st.wheel_agl, st.gs_kt, st.hat_replies,
-                      st.last_hat, st.contacts);
-        if (target == "/" || target == "/index.html") {
-            body = ios_page();
-            type = "text/html";
-        } else if (target == "/status") {
-            body = sb;
+                      st.mode.c_str(), st.preset.c_str(), st.phase.c_str(), st.frozen ? 1 : 0, st.t,
+                      st.lat, st.lon, st.alt, st.wheel_agl, st.gs_kt, st.hat_replies, st.last_hat,
+                      st.contacts);
+        if (path_only == "/" || path_only == "/index.html") {
+            ios_reply(c, 200, "text/html", ios_page());
+        } else if (path_only == "/status") {
+            ios_reply(c, 200, "text/plain", sb);
+        } else if (path_only == "/api/v1/status") {
+            ios_reply(c, 200, "application/json", ios_status_json(st));
+        } else if (path_only.rfind("/api/v1/", 0) == 0) {
+            IosCommand cmd = parse_ios_json(path_only, req_body);
+            if (cmd.op.empty()) {
+                ios_reply(c, 400, "application/json",
+                          "{\"ok\":false,\"error\":\"unknown command\"}");
+            } else {
+                out.push_back(cmd);
+                ios_reply(c, 200, "application/json",
+                          "{\"ok\":true,\"op\":\"" + cmd.op + "\"}");
+            }
         } else {
             IosCommand cmd = parse_ios_query(target);
             if (cmd.op.empty()) {
-                body = "unknown command\n";
+                ios_reply(c, 400, "text/plain", "unknown command\n");
             } else {
                 out.push_back(cmd);
-                body = "ok " + cmd.op + " " + cmd.arg + "\n" + sb;
+                ios_reply(c, 200, "text/plain", "ok " + cmd.op + " " + cmd.arg + "\n" + sb);
             }
         }
-        std::string resp = "HTTP/1.0 200 OK\r\nContent-Type: " + type +
-                           "\r\nCache-Control: no-store\r\nContent-Length: " +
-                           std::to_string(body.size()) + "\r\n\r\n" + body;
-        (void)::send(c, resp.data(), resp.size(), MSG_NOSIGNAL);
-        ::close(c);
+        ios_close(c);
     }
-#else
-    (void)st;
-#endif
     return out;
 }
 
@@ -798,7 +1651,8 @@ std::vector<std::uint8_t> build_frame_datagram(const Frame& f, unsigned count,
     if (count == 1 || count % 30 == 0) {
         pk.push_back(xt4::build_env(env.tod_hours, std::min(env.vis_ft, xt4::kMaxVisibilityFt),
                                     env.month, env.day, env.year, ff, -1, env.precip_type,
-                                    env.precip_intensity, 0, env.wind_mph, env.wind_dir));
+                                    env.precip_intensity, 0, env.wind_mph, env.wind_dir,
+                                    env.runway_condition));
         if (env.rvr_ft > 0)
             pk.push_back(xt4::build_fog(env.fog_top_ft, env.rvr_ft, ff, -1, 0));
         else
@@ -811,11 +1665,28 @@ std::vector<std::uint8_t> build_frame_datagram(const Frame& f, unsigned count,
                                          ff, -1, 3, -1.f, env.wind_mph / 1.15078f, env.wind_dir));
         else
             pk.push_back(xt4::build_cloud(xt4::kTypeLowerCloud, -1, 0, 0, ff));
+        if (env.upper_ceiling_ft_msl > 0)
+            pk.push_back(xt4::build_cloud(xt4::kTypeUpperCloud, 0, env.upper_ceiling_ft_msl,
+                                         env.upper_top_ft_msl > env.upper_ceiling_ft_msl
+                                             ? env.upper_top_ft_msl
+                                             : env.upper_ceiling_ft_msl + 2000.f,
+                                         ff, -1, 3, -1.f, env.wind_mph / 1.15078f, env.wind_dir));
+        else
+            pk.push_back(xt4::build_cloud(xt4::kTypeUpperCloud, -1, 0, 0, ff));
     }
     if (count == 1 || count % 100 == 2) {
         pk.push_back(xt4::build_display(true));
-        for (int sw = 1; sw <= 4; ++sw) // same switch numbers as s376-synth
-            pk.push_back(xt4::build_light_switch(sw, env.light_step));
+        // s376-synth: 1 edge, 2 centreline, 3 approach, 4 threshold/end.
+        const int rwy = env.rwy_light_step >= 0 ? env.rwy_light_step : env.light_step;
+        const int apch = env.apch_light_step >= 0 ? env.apch_light_step : env.light_step;
+        const int envl = env.env_light_step >= 0 ? env.env_light_step : env.light_step;
+        pk.push_back(xt4::build_light_switch(1, rwy));
+        pk.push_back(xt4::build_light_switch(2, rwy));
+        pk.push_back(xt4::build_light_switch(3, apch));
+        pk.push_back(xt4::build_light_switch(4, rwy));
+        pk.push_back(xt4::build_light_switch(41, envl)); // taxi edge
+        pk.push_back(xt4::build_light_switch(56, envl)); // stop bar
+        pk.push_back(xt4::build_light_switch(60, envl)); // taxi centreline
     }
     return xt4::build_datagram(pk, wo);
 }

@@ -7,6 +7,7 @@
 #include "s376/xt4.hpp"
 
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <stdexcept>
 #include <string>
@@ -120,11 +121,51 @@ Frame interpolate(const std::vector<Frame>& tr, double t);
 struct Controls {
     double elevator = 0; // -1..1, pitch-rate command (nose up +); neutral holds attitude
     double aileron = 0;  // -1..1, roll-rate command (right +); neutral slowly levels
+    double rudder = 0;   // -1..1, yaw/heading rate (right +); stronger on the ground
     double throttle = 0.45; // 0..1; 0.45 = trimmed 3 deg descent at Vref+5, flaps 30, gear down
     bool gear_down = true;
     int flaps = 30;
     bool lights = true;
 };
+
+// USB yoke / throttle / pedals: raw OS axes are -1..1 (or 0..1 for
+// triggers). Mapping + calibration live in TOML so Linux evdev, Windows
+// winmm/XInput and optional SDL2 share one file. See docs/FAKEHOST_API.md.
+struct AxisCal {
+    double min = -1, max = 1, center = 0;
+    double deadzone = 0.04;
+    bool invert = false;
+    bool seeded = false; // set by cal_note
+};
+// Named raw channels from the OS driver. winmm: x/y/z/rx/ry/rz/slider.
+// XInput: lx/ly/rx/ry/lt/rt. evdev: x/y/z/rx/ry/rz/throttle. SDL2: the
+// same names plus hatx/haty.
+struct RawAxes {
+    double x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0, slider = 0;
+    double lx = 0, ly = 0, xirx = 0, xiry = 0, lt = 0, rt = 0;
+    double hatx = 0, haty = 0;
+    std::uint32_t buttons = 0;
+};
+struct InputMap {
+    std::string aileron_src = "x";
+    std::string elevator_src = "y";
+    std::string rudder_src = "rx";
+    std::string throttle_src = "z";
+    AxisCal aileron, elevator, rudder, throttle;
+    int btn_gear = 0, btn_flaps = 1, btn_lights = 2;
+};
+// raw in the driver's native range is first scaled into [-1, 1] (or
+// [0, 1] for throttle sources that are already 0..1) then this applies
+// invert / deadzone / min-max / center.
+double apply_axis(double raw_unit, const AxisCal& cal, bool unipolar = false);
+const double* raw_axis_ptr(const RawAxes& a, const std::string& name);
+void apply_input_map(const InputMap& m, const RawAxes& raw, Controls& c, std::uint32_t& prev_buttons);
+void cal_note(AxisCal& cal, double raw_unit);
+void cal_finish(AxisCal& cal);
+InputMap parse_input_map_toml(const std::string& text);
+InputMap load_input_map(const std::string& path);
+std::string format_input_map_toml(const InputMap& m);
+void save_input_map(const std::string& path, const InputMap& m);
 
 // Pluggable control inputs for manual mode. Each source updates the
 // fields it owns and leaves the rest alone, so a yoke, a throttle quadrant
@@ -135,6 +176,30 @@ class ControlSource {
     virtual const char* name() const = 0;
     virtual bool ok() const { return true; }
     virtual void poll(Controls& c) = 0;
+    virtual bool last_raw(RawAxes& out) const {
+        (void)out;
+        return false;
+    }
+};
+
+// Timestamped control CSV for CI / `--controls-replay`.
+// Header: t,elevator,aileron,throttle[,rudder,gear,flaps,lights]
+class ReplayControlSource : public ControlSource {
+  public:
+    ReplayControlSource() = default;
+    ReplayControlSource(std::vector<double> t, std::vector<Controls> c);
+    static ReplayControlSource from_csv(const std::string& text);
+    static ReplayControlSource load(const std::string& path);
+    const char* name() const override { return "replay"; }
+    void set_time(double t) { now_ = t; }
+    void poll(Controls& c) override;
+    bool done() const;
+    double duration() const { return t_.empty() ? 0 : t_.back(); }
+
+  private:
+    std::vector<double> t_;
+    std::vector<Controls> c_;
+    double now_ = 0;
 };
 
 // Future cockpit-IO bridge (the real cockpit switches/yoke via some IO
@@ -161,6 +226,8 @@ class ManualFlight {
   public:
     ManualFlight(const Runway& rwy, double start_nm, double gs_deg, bool on_runway = false);
     void reposition(const Runway& rwy, double start_nm, double gs_deg, bool on_runway);
+    // Pilot-eye WGS-84 (same as the type-100 wire).
+    void reposition_lla(double eye_lat, double eye_lon, double eye_alt_ft, double hdg_deg);
     Frame step(double dt, const Controls& c);
     const Runway& runway() const { return rwy_; }
 
@@ -171,18 +238,79 @@ class ManualFlight {
 };
 
 // ---------------------------------------------------------------- IOS
-// Minimal instructor station: a tiny HTTP page on loopback (guarded).
+// Instructor station: HTML page + documented JSON-over-HTTP API on
+// loopback only (docs/FAKEHOST_API.md). Guarded the same way as UDP.
 struct IosCommand {
-    std::string op; // reposition | freeze | unfreeze | tod | vis | wind | ceiling | rvr | quit
+    std::string op; // reposition | freeze | unfreeze | tod | vis | wind |
+                    // ceiling | rvr | weather | lights | cloud | state |
+                    // rwy-cond | quit
     std::string arg;
+    bool have_lla = false;
+    double lat = 0, lon = 0, alt_ft = 0, hdg = 0;
+    bool have_runway = false;
+    std::string icao, runway;
+    double distance_nm = 0;
+    bool on_runway = false;
+    bool have_tod = false;
+    float tod_hours = 0;
+    bool have_vis = false;
+    float vis_sm = 0;
+    bool have_wind = false;
+    float wind_dir = 0, wind_mph = 0;
+    bool have_ceiling = false, have_cloud_top = false;
+    float ceiling_ft = -1, cloud_top_ft = -1;
+    bool have_upper = false;
+    float upper_ceiling_ft = -1, upper_top_ft = -1;
+    bool have_rvr = false;
+    float rvr_ft = -1;
+    bool have_precip = false;
+    int precip_type = 0, precip_intensity = 0;
+    bool have_rwy_cond = false;
+    int rwy_cond = 0; // type-124: 0 dry, 1 damp, 2 wet, 3+ flooded
+    bool have_lights = false;
+    int light_step = -1, rwy_light = -1, apch_light = -1, env_light = -1;
+    bool have_state = false;
+    double pitch = 0, roll = 0, gs_kt = 0;
+    bool have_gear = false, gear_down = false;
+    int flaps = -1;
+    double timeout_s = -1;
+    bool have_frozen = false, frozen = false;
 };
 struct IosStatus {
     std::string mode, phase, preset;
     double t = 0, wheel_agl = 0, gs_kt = 0, lat = 0, lon = 0, alt = 0;
+    double hdg = 0, pitch = 0, roll = 0;
     bool frozen = false;
+    bool gear_down = false;
+    int flaps = 0;
     int hat_replies = 0, contacts = 0;
     float last_hat = 0;
+    float tod_hours = 14.5f, vis_sm = 10, wind_dir = 0, wind_mph = 0;
+    float ceiling_ft = -1, cloud_top_ft = -1, upper_ceiling_ft = -1, upper_top_ft = -1;
+    float rvr_ft = -1;
+    int light_step = 5, rwy_light = 5, apch_light = 5, env_light = 5;
+    int rwy_cond = 0; // type-124 runway_condition
 };
+
+// Live 60 Hz adapter feed. Stops updating (caller should freeze) when
+// no POST /api/v1/state arrives within timeout_s (default 250 ms).
+class LiveStateFeed {
+  public:
+    static constexpr double kDefaultTimeoutS = 0.25;
+    void set_timeout(double s) { timeout_s_ = s > 0 ? s : kDefaultTimeoutS; }
+    void push(const Frame& f);
+    bool active() const { return active_; }
+    bool stale() const;
+    const Frame& frame() const { return f_; }
+    void clear();
+
+  private:
+    Frame f_{};
+    bool active_ = false;
+    double timeout_s_ = kDefaultTimeoutS;
+    std::chrono::steady_clock::time_point last_{};
+};
+
 class IosServer {
   public:
     ~IosServer();
@@ -191,14 +319,38 @@ class IosServer {
     // Non-blocking: accept/serve pending requests, return parsed commands.
     std::vector<IosCommand> poll(const IosStatus& st);
   private:
-    int fd_ = -1;
+    std::intptr_t fd_ = -1; // SOCKET on Windows, int elsewhere
     std::uint16_t port_ = 0;
 };
+
+struct Environment;
+
+struct IosEffect {
+    bool quit = false;
+    bool set_frozen = false;
+    bool frozen = false;
+    bool reposition = false;
+    bool reposition_lla = false;
+    bool have_state = false;
+    Frame state;
+    std::string preset;
+    std::string icao, runway;
+    double start_nm = 0;
+    bool on_runway = false;
+    double lat = 0, lon = 0, alt_ft = 0, hdg = 0;
+};
+
+// Apply env / lights / cloud / live-state fields. Reposition and freeze
+// are returned for the caller (manual / profile / live) to enact.
+IosEffect apply_ios_command(const IosCommand& cmd, Environment& env, LiveStateFeed* live);
+
 // Presets the IOS page offers: kjfk-04r-6nm, kjfk-04r-6sm, kjfk-04r-rwy,
 // kjfk-13l-6nm, kjfk-13l-6sm, kjfk-13l-rwy (any <icao>-<rwy>-<dist|rwy>).
 bool parse_preset(const std::string& p, std::string& icao, std::string& rwy, double& start_nm,
                   bool& on_runway);
 IosCommand parse_ios_query(const std::string& target); // "/cmd?op=tod&arg=19"
+IosCommand parse_ios_json(const std::string& path, const std::string& body);
+std::string ios_status_json(const IosStatus& st);
 std::string ios_page();
 
 // ---------------------------------------------------------------- wire
@@ -209,8 +361,13 @@ struct Environment {
     float wind_mph = 0, wind_dir = 0;
     int precip_type = 0, precip_intensity = 0;
     float ceiling_ft_msl = -1, cloud_top_ft_msl = -1; // <0 = no layer
+    float upper_ceiling_ft_msl = -1, upper_top_ft_msl = -1;
     float rvr_ft = -1, fog_top_ft = 0;                // <0 = no fog
-    int light_step = 5;
+    int runway_condition = 0;                         // type-124: 0 dry / 1 damp / 2 wet / 3+ flooded
+    int light_step = 5;                               // default for unspecified groups
+    int rwy_light_step = 5;                           // type-112 switches 1, 2, 4
+    int apch_light_step = 5;                          // type-112 switch 3
+    int env_light_step = 5;                           // taxi / stop-bar (41, 56, 60)
 };
 // One host datagram for frame n (1-based count), same packet mix as s376-synth.
 std::vector<std::uint8_t> build_frame_datagram(const Frame& f, unsigned count,

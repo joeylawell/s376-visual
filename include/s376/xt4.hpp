@@ -243,7 +243,8 @@ std::vector<std::uint16_t> build_lights(bool beacon, bool strobe, std::uint16_t 
 std::vector<std::uint16_t> build_env(float tod_hours, float visible_range_ft, int month, int day,
                                      int year, FloatFmt fmt, int tod_select = -1, int precip_type = 0,
                                      int precip_intensity = 0, int lightning = 0,
-                                     float wind_mph = 0, float wind_dir = 0);
+                                     float wind_mph = 0, float wind_dir = 0,
+                                     int runway_condition = 0);
 std::vector<std::uint16_t> build_fog(float height_ft, float rvr_ft, FloatFmt fmt, int region = -1,
                                      int select = 0);
 std::vector<std::uint16_t> build_cloud(int type, int select, float ceiling_ft, float top_ft,

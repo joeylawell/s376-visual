@@ -3,26 +3,40 @@
 // end-to-end against the renderer's own HostReceiver, and (if a path is
 // given as argv[1]) the real s376-visual --headless binary on loopback.
 
+#include "s376/display.hpp"
 #include "s376/fakehost.hpp"
 #include "s376/geo.hpp"
 #include "s376/host.hpp"
 #include "s376/state.hpp"
 #include "s376/xt4.hpp"
 
-#include <arpa/inet.h>
 #include <chrono>
 #include <cmath>
 #include <csignal>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <fstream>
 #include <iostream>
-#include <netinet/in.h>
 #include <string>
+#include <thread>
+
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#else
+#include <arpa/inet.h>
+#include <netinet/in.h>
 #include <sys/socket.h>
 #include <sys/wait.h>
-#include <thread>
 #include <unistd.h>
+#endif
 
 namespace fh = s376::fakehost;
 static int fails = 0, passes = 0;
@@ -37,6 +51,59 @@ static int fails = 0, passes = 0;
         if (std::fabs(_a - _b) <= (e)) ++passes;                                                   \
         else { ++fails; std::cerr << "FAIL " << __LINE__ << " " #a "=" << _a << " " #b "=" << _b << "\n"; } \
     } while (0)
+
+#ifdef _WIN32
+struct WsaOnce {
+    WsaOnce() {
+        WSADATA w{};
+        WSAStartup(MAKEWORD(2, 2), &w);
+    }
+};
+static WsaOnce g_wsa;
+using TestSock = SOCKET;
+constexpr TestSock kTestInvalid = INVALID_SOCKET;
+void test_close(TestSock s) {
+    if (s != kTestInvalid)
+        closesocket(s);
+}
+void env_set(const char* k, const char* v) { _putenv_s(k, v); }
+void env_unset(const char* k) { _putenv_s(k, ""); }
+#else
+using TestSock = int;
+constexpr TestSock kTestInvalid = -1;
+void test_close(TestSock s) {
+    if (s >= 0)
+        ::close(s);
+}
+void env_set(const char* k, const char* v) { setenv(k, v, 1); }
+void env_unset(const char* k) { unsetenv(k); }
+#endif
+
+static bool http_exchange(std::uint16_t port, const std::string& req, std::string& resp) {
+    TestSock fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (fd == kTestInvalid)
+        return false;
+    sockaddr_in a{};
+    a.sin_family = AF_INET;
+    a.sin_port = htons(port);
+    inet_pton(AF_INET, "127.0.0.1", &a.sin_addr);
+    if (connect(fd, reinterpret_cast<sockaddr*>(&a), sizeof(a)) != 0) {
+        test_close(fd);
+        return false;
+    }
+#ifdef _WIN32
+    ::send(fd, req.data(), static_cast<int>(req.size()), 0);
+    char b[4096];
+    const int n = ::recv(fd, b, sizeof(b) - 1, 0);
+#else
+    ::send(fd, req.data(), req.size(), 0);
+    char b[4096];
+    const auto n = ::recv(fd, b, sizeof(b) - 1, 0);
+#endif
+    resp = n > 0 ? std::string(b, static_cast<std::size_t>(n)) : "";
+    test_close(fd);
+    return n > 0;
+}
 
 static bool refused(const std::string& h, std::uint16_t p) {
     try { fh::guard(h, p, "test"); } catch (const fh::Refused&) { return true; }
@@ -69,12 +136,12 @@ static void test_guard() {
         CHECK(std::string(e.what()).find("3340") != std::string::npos);
     }
     // Environment variables do NOT relax the fakehost guard.
-    setenv("S376_ALLOW_LAN", "1", 1);
-    setenv("S376_ALLOW_SIM_LAN", "1", 1);
+    env_set("S376_ALLOW_LAN", "1");
+    env_set("S376_ALLOW_SIM_LAN", "1");
     CHECK(refused("10.1.95.2", 2300));
     CHECK(refused("192.168.1.2", 2300));
-    unsetenv("S376_ALLOW_LAN");
-    unsetenv("S376_ALLOW_SIM_LAN");
+    env_unset("S376_ALLOW_LAN");
+    env_unset("S376_ALLOW_SIM_LAN");
     // Socket-address form.
     sockaddr_in a{};
     a.sin_family = AF_INET;
@@ -346,20 +413,16 @@ static void test_ios() {
     CHECK(c.op == "reposition" && c.arg == "kjfk-04r-6sm");
     CHECK(fh::parse_ios_query("/cmd?op=wind&arg=040%2F10").arg == "040/10");
     CHECK(fh::parse_ios_query("/cmd?op=rm&arg=x").op.empty());
+    CHECK(fh::parse_ios_query("/cmd?op=lights&arg=3").op == "lights");
+    CHECK(fh::parse_ios_query("/cmd?op=rwy-cond&arg=2").op == "rwy-cond");
+    CHECK(fh::parse_ios_query("/cmd?op=rwy-cond&arg=2").arg == "2");
     // Live server on an ephemeral loopback port.
     fh::IosServer s;
     s.start("127.0.0.1:0");
     CHECK(s.port() != 0);
     std::thread cl([&] {
-        int fd = socket(AF_INET, SOCK_STREAM, 0);
-        sockaddr_in a{}; a.sin_family = AF_INET; a.sin_port = htons(s.port());
-        inet_pton(AF_INET, "127.0.0.1", &a.sin_addr);
-        if (connect(fd, reinterpret_cast<sockaddr*>(&a), sizeof(a)) == 0) {
-            const char* req = "GET /cmd?op=tod&arg=19.5 HTTP/1.0\r\n\r\n";
-            send(fd, req, strlen(req), 0);
-            char b[512]; (void)recv(fd, b, sizeof(b), 0);
-        }
-        close(fd);
+        std::string resp;
+        http_exchange(s.port(), "GET /cmd?op=tod&arg=19.5 HTTP/1.0\r\n\r\n", resp);
     });
     std::vector<fh::IosCommand> got;
     for (int i = 0; i < 200 && got.empty(); ++i) {
@@ -368,6 +431,232 @@ static void test_ios() {
     }
     cl.join();
     CHECK(got.size() == 1 && got[0].op == "tod" && got[0].arg == "19.5");
+}
+
+static void test_input_map() {
+    const auto m = fh::parse_input_map_toml(
+        "[axis.aileron]\nsource = \"x\"\ndeadzone = 0.1\n"
+        "[axis.elevator]\nsource = \"y\"\ninvert = true\n"
+        "[axis.rudder]\nsource = \"rx\"\n"
+        "[axis.throttle]\nsource = \"z\"\ninvert = true\n"
+        "[button]\ngear = 0\nflaps = 1\nlights = 2\n");
+    CHECK(m.aileron_src == "x" && m.elevator_src == "y");
+    CHECK(m.elevator.invert && m.throttle.invert);
+    NEAR(m.aileron.deadzone, 0.1, 1e-9);
+    CHECK(m.btn_gear == 0 && m.btn_flaps == 1);
+    const std::string round = fh::format_input_map_toml(m);
+    const auto m2 = fh::parse_input_map_toml(round);
+    CHECK(m2.aileron_src == "x" && m2.elevator.invert);
+    fh::AxisCal dz;
+    dz.deadzone = 0.04;
+    NEAR(fh::apply_axis(0.02, dz), 0, 1e-12);
+    CHECK(std::fabs(fh::apply_axis(1.0, dz) - 1.0) < 1e-9);
+    fh::AxisCal inv = dz;
+    inv.invert = true;
+    NEAR(fh::apply_axis(1.0, inv), -1.0, 1e-9);
+    fh::AxisCal uni;
+    uni.deadzone = 0.1;
+    NEAR(fh::apply_axis(0.05, uni, true), 0, 1e-12);
+    CHECK(fh::apply_axis(1.0, uni, true) > 0.9);
+    fh::RawAxes raw;
+    raw.x = 0.5;
+    raw.y = 0.8;
+    raw.z = -0.2;
+    raw.rx = -0.3;
+    raw.buttons = 1; // gear rising
+    fh::Controls c;
+    std::uint32_t prev = 0;
+    fh::apply_input_map(m, raw, c, prev);
+    CHECK(c.aileron > 0.3);
+    CHECK(c.elevator < 0); // invert
+    CHECK(c.gear_down == false); // default true, toggled
+    CHECK(prev == 1);
+    fh::AxisCal acc;
+    fh::cal_note(acc, -0.7);
+    fh::cal_note(acc, 0.9);
+    fh::cal_finish(acc);
+    NEAR(acc.min, -0.7, 1e-12);
+    NEAR(acc.max, 0.9, 1e-12);
+    const auto repo = fh::load_input_map(std::string(S376_SRC_DIR) + "/data/fakehost/yoke.toml");
+    CHECK(repo.aileron_src == "x" && repo.elevator.invert);
+}
+
+static void test_ios_json_api() {
+    auto cmd = fh::parse_ios_json("/api/v1/reposition",
+                                  "{\"preset\":\"kjfk-04r-6nm\"}");
+    CHECK(cmd.op == "reposition" && cmd.arg == "kjfk-04r-6nm");
+    cmd = fh::parse_ios_json("/api/v1/reposition",
+                            "{\"icao\":\"KJFK\",\"runway\":\"13L\",\"distance\":\"6sm\"}");
+    CHECK(cmd.op == "reposition" && cmd.have_runway && cmd.runway == "13L");
+    NEAR(cmd.distance_nm, 5.2138, 1e-3);
+    cmd = fh::parse_ios_json("/api/v1/reposition",
+                            "{\"lat\":40.64,\"lon\":-73.78,\"alt_ft\":1500,\"hdg\":31}");
+    CHECK(cmd.have_lla);
+    NEAR(cmd.lat, 40.64, 1e-9);
+    cmd = fh::parse_ios_json("/api/v1/tod", "{\"hours\":19.5}");
+    CHECK(cmd.op == "tod" && cmd.have_tod);
+    NEAR(cmd.tod_hours, 19.5, 1e-6);
+    cmd = fh::parse_ios_json("/api/v1/weather",
+                            "{\"vis_sm\":3,\"wind_dir\":40,\"wind_mph\":10,\"ceiling_ft\":800,"
+                            "\"rvr_ft\":2400}");
+    CHECK(cmd.op == "weather" && cmd.have_vis && cmd.have_wind && cmd.have_rvr);
+    cmd = fh::parse_ios_json("/api/v1/lights", "{\"runway\":5,\"approach\":3,\"environment\":1}");
+    CHECK(cmd.op == "lights" && cmd.have_lights);
+    CHECK(cmd.rwy_light == 5 && cmd.apch_light == 3 && cmd.env_light == 1);
+    cmd = fh::parse_ios_json("/api/v1/cloud",
+                            "{\"ceiling_ft\":2000,\"upper_ceiling_ft\":20000,\"upper_top_ft\":25000}");
+    CHECK(cmd.have_ceiling && cmd.have_upper);
+    cmd = fh::parse_ios_json("/api/v1/state",
+                            "{\"lat\":40.6,\"lon\":-73.8,\"alt_ft\":900,\"hdg\":31,\"pitch\":2.5,"
+                            "\"roll\":0,\"gs_kt\":145,\"gear_down\":true,\"flaps\":30}");
+    CHECK(cmd.op == "state" && cmd.have_state && cmd.have_gear && cmd.flaps == 30);
+    cmd = fh::parse_ios_json("/api/v1/freeze", "{\"frozen\":false}");
+    CHECK(cmd.op == "unfreeze");
+    CHECK(fh::parse_ios_json("/api/v1/nope", "{}").op.empty());
+
+    fh::Environment env;
+    fh::LiveStateFeed live;
+    auto eff = fh::apply_ios_command(
+        fh::parse_ios_json("/api/v1/tod", "{\"hours\":3.25}"), env, &live);
+    NEAR(env.tod_hours, 3.25, 1e-4);
+    (void)eff;
+    fh::apply_ios_command(fh::parse_ios_json("/api/v1/lights", "{\"step\":2}"), env, nullptr);
+    CHECK(env.light_step == 2 && env.rwy_light_step == 2 && env.apch_light_step == 2);
+    fh::apply_ios_command(
+        fh::parse_ios_json("/api/v1/cloud", "{\"upper_ceiling_ft\":18000,\"upper_top_ft\":22000}"),
+        env, nullptr);
+    NEAR(env.upper_ceiling_ft_msl, 18000, 1);
+    auto stcmd = fh::parse_ios_json(
+        "/api/v1/state", "{\"lat\":40.63,\"lon\":-73.77,\"alt_ft\":1200,\"hdg\":31,\"gs_kt\":140}");
+    fh::apply_ios_command(stcmd, env, &live);
+    CHECK(live.active());
+    NEAR(live.frame().lat, 40.63, 1e-6);
+    live.set_timeout(0.02);
+    std::this_thread::sleep_for(std::chrono::milliseconds(40));
+    CHECK(live.stale());
+
+    const auto js = fh::ios_status_json(fh::IosStatus{});
+    CHECK(js.find("\"ok\":true") != std::string::npos);
+    CHECK(js.find("\"lights\"") != std::string::npos);
+    CHECK(js.find("\"rwy_cond\"") != std::string::npos);
+
+    // Upper cloud and per-group lights on the wire.
+    fh::Frame f;
+    f.lat = 40.6;
+    f.lon = -73.8;
+    f.alt_ft = 500;
+    f.hdg = 31;
+    env.upper_ceiling_ft_msl = 20000;
+    env.upper_top_ft_msl = 25000;
+    env.rwy_light_step = 5;
+    env.apch_light_step = 2;
+    env.env_light_step = 1;
+    auto dg = fh::build_frame_datagram(f, 1, env, s376::xt4::WordOrder::Le, s376::xt4::FloatFmt::Ieee);
+    s376::xt4::Decoder dec;
+    auto p = dec.parse(dg.data(), dg.size());
+    CHECK(p.has_value());
+    bool upper = false, apch2 = false, env1 = false;
+    for (const auto& pk : p->packets) {
+        if (pk.type == s376::xt4::kTypeUpperCloud)
+            upper = true;
+        if (pk.type == s376::xt4::kTypeLightSwitch) {
+            const auto sw = s376::xt4::decode_light_switch(pk);
+            if (sw.switch_num == 3 && sw.step == 2)
+                apch2 = true;
+            if (sw.switch_num == 41 && sw.step == 1)
+                env1 = true;
+        }
+    }
+    CHECK(upper && apch2 && env1);
+
+    fh::IosServer s;
+    s.start("127.0.0.1:0");
+    fh::IosStatus st;
+    st.mode = "manual";
+    std::string body;
+    std::thread cl([&] {
+        http_exchange(s.port(),
+                      "POST /api/v1/reposition HTTP/1.0\r\nContent-Type: application/json\r\n"
+                      "Content-Length: 38\r\n\r\n{\"preset\":\"kjfk-13l-6nm\"}",
+                      body);
+    });
+    std::vector<fh::IosCommand> got;
+    for (int i = 0; i < 200 && got.empty(); ++i) {
+        got = s.poll(st);
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+    cl.join();
+    CHECK(got.size() == 1 && got[0].op == "reposition" && got[0].arg == "kjfk-13l-6nm");
+    CHECK(body.find("\"ok\":true") != std::string::npos);
+    std::thread cl2([&] {
+        http_exchange(s.port(), "GET /api/v1/status HTTP/1.0\r\n\r\n", body);
+    });
+    for (int i = 0; i < 80; ++i) {
+        s.poll(st);
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+    cl2.join();
+    CHECK(body.find("\"mode\":\"manual\"") != std::string::npos);
+}
+
+static void test_controls_replay_10s() {
+    const auto src_path = std::string(S376_SRC_DIR) + "/data/fakehost/controls-10s.csv";
+    auto replay = fh::ReplayControlSource::load(src_path);
+    NEAR(replay.duration(), 10.0, 1e-9);
+    const auto rwy = fh::runway_from_faa("KJFK", "04R");
+    fh::ManualFlight m(rwy, 6.0, 3.0);
+    fh::Controls c;
+    fh::Frame f;
+    const double dt = 1.0 / 60.0;
+    for (int i = 0; i < 60 * 10; ++i) {
+        replay.set_time(i * dt);
+        replay.poll(c);
+        f = m.step(dt, c);
+    }
+    CHECK(f.t >= 9.9);
+    CHECK(c.gear_down && c.flaps == 30);
+    CHECK(f.gs_kt > 80 && f.gs_kt < 180);
+    // Arbitrary LLA snap.
+    m.reposition_lla(40.64, -73.78, 1500.0, 31.0);
+    fh::Controls idle = c;
+    idle.elevator = idle.aileron = idle.rudder = 0;
+    idle.throttle = 0.45;
+    f = m.step(dt, idle);
+    const double d = s376::geo::ground_distance_m(40.64, -73.78, f.lat, f.lon);
+    CHECK(d < 5.0);
+    NEAR(f.hdg, 31.0, 0.5);
+
+    // Combined: IOS server + JSON + 10 s replay (Windows CI contract).
+    fh::IosServer ios;
+    ios.start("127.0.0.1:0");
+    fh::Environment env;
+    fh::LiveStateFeed live;
+    fh::IosStatus st;
+    st.mode = "manual";
+    std::string resp;
+    std::thread cl([&] {
+        http_exchange(ios.port(),
+                      "POST /api/v1/tod HTTP/1.0\r\nContent-Length: 15\r\n\r\n{\"hours\":19.0}",
+                      resp);
+    });
+    std::vector<fh::IosCommand> got;
+    for (int i = 0; i < 200 && got.empty(); ++i) {
+        got = ios.poll(st);
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+    cl.join();
+    CHECK(!got.empty());
+    fh::apply_ios_command(got[0], env, &live);
+    NEAR(env.tod_hours, 19.0, 1e-3);
+    replay.set_time(0);
+    for (int i = 0; i < 60 * 10; ++i) {
+        replay.set_time(i * dt);
+        replay.poll(c);
+        f = m.step(dt, c);
+        if (i % 30 == 0)
+            ios.poll(st);
+    }
+    CHECK(f.t >= 9.9);
 }
 
 // Fly the 04R profile through the renderer's own HostReceiver (in-process,
@@ -381,13 +670,18 @@ static void test_inprocess_e2e() {
     hc.hat_responder = true;
     s376::HostReceiver rx(st, hc);
     rx.start();
-    int fd = socket(AF_INET, SOCK_DGRAM, 0);
+    TestSock fd = socket(AF_INET, SOCK_DGRAM, 0);
     sockaddr_in me{}; me.sin_family = AF_INET; me.sin_port = htons(23901);
     inet_pton(AF_INET, "127.0.0.1", &me.sin_addr);
     fh::guard_sockaddr(&me, sizeof(me), "bind");
     CHECK(bind(fd, reinterpret_cast<sockaddr*>(&me), sizeof(me)) == 0);
+#ifdef _WIN32
+    DWORD tv = 50;
+    setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&tv), sizeof(tv));
+#else
     timeval tv{0, 50000};
     setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+#endif
     sockaddr_in ig = me; ig.sin_port = htons(23900);
     fh::ProfileConfig pc;
     pc.rwy = fh::runway_from_faa("KJFK", "04R");
@@ -402,9 +696,16 @@ static void test_inprocess_e2e() {
         auto dg = fh::build_frame_datagram(f, count, fh::Environment{}, s376::xt4::WordOrder::Le,
                                            s376::xt4::FloatFmt::Vax);
         fh::guard_sockaddr(&ig, sizeof(ig), "send");
+#ifdef _WIN32
+        sendto(fd, reinterpret_cast<const char*>(dg.data()), static_cast<int>(dg.size()), 0,
+               reinterpret_cast<sockaddr*>(&ig), sizeof(ig));
+        std::uint8_t b[256];
+        const int n = recv(fd, reinterpret_cast<char*>(b), sizeof(b), 0);
+#else
         sendto(fd, dg.data(), dg.size(), 0, reinterpret_cast<sockaddr*>(&ig), sizeof(ig));
         std::uint8_t b[256];
         const auto n = recv(fd, b, sizeof(b), 0);
+#endif
         fh::HatReply h;
         if (n > 0 && fh::decode_hat_reply(b, static_cast<std::size_t>(n), h))
             chk.note(f, h, pc.rwy.elev_ft);
@@ -426,17 +727,89 @@ static void test_inprocess_e2e() {
     low.wheel_agl_ft = 30; // host thinks it is airborne
     auto dg = fh::build_frame_datagram(low, 9, fh::Environment{}, s376::xt4::WordOrder::Le,
                                        s376::xt4::FloatFmt::Vax);
+#ifdef _WIN32
+    sendto(fd, reinterpret_cast<const char*>(dg.data()), static_cast<int>(dg.size()), 0,
+           reinterpret_cast<sockaddr*>(&ig), sizeof(ig));
+    std::uint8_t b[256];
+    const int n = recv(fd, reinterpret_cast<char*>(b), sizeof(b), 0);
+#else
     sendto(fd, dg.data(), dg.size(), 0, reinterpret_cast<sockaddr*>(&ig), sizeof(ig));
     std::uint8_t b[256];
     const auto n = recv(fd, b, sizeof(b), 0);
+#endif
     fh::HatReply h;
     CHECK(n > 0 && fh::decode_hat_reply(b, static_cast<std::size_t>(n), h));
     chk.note(low, h, pc.rwy.elev_ft);
     CHECK(chk.contacts >= 1);
-    close(fd);
+    test_close(fd);
     rx.stop();
 }
 
+// Type-124 runway_condition: IOS / JSON → datagram word 7 → visual wetness.
+static void test_rwy_cond() {
+    auto cmd = fh::parse_ios_json("/api/v1/rwy-cond", "{\"condition\":2}");
+    CHECK(cmd.op == "rwy-cond" && cmd.have_rwy_cond && cmd.rwy_cond == 2);
+    cmd = fh::parse_ios_json("/api/v1/rwy-cond", "{\"rwy_cond\":1}");
+    CHECK(cmd.have_rwy_cond && cmd.rwy_cond == 1);
+    cmd = fh::parse_ios_json("/api/v1/runway_condition", "{\"runway_condition\":3}");
+    CHECK(cmd.op == "runway_condition" && cmd.have_rwy_cond && cmd.rwy_cond == 3);
+    cmd = fh::parse_ios_json("/api/v1/weather", "{\"vis_sm\":10,\"rwy_cond\":2}");
+    CHECK(cmd.op == "weather" && cmd.have_rwy_cond && cmd.rwy_cond == 2);
+    cmd = fh::parse_ios_json("/api/v1/rwy-cond", "{\"condition\":-4}");
+    CHECK(cmd.have_rwy_cond && cmd.rwy_cond == 0);
+    auto q = fh::parse_ios_query("/cmd?op=rwy-cond&arg=2");
+    CHECK(q.op == "rwy-cond" && q.arg == "2");
+
+    fh::Environment env;
+    CHECK(env.runway_condition == 0);
+    fh::apply_ios_command(fh::parse_ios_json("/api/v1/rwy-cond", "{\"condition\":2}"), env, nullptr);
+    CHECK(env.runway_condition == 2);
+    fh::apply_ios_command(fh::parse_ios_query("/cmd?op=rwy-cond&arg=5"), env, nullptr);
+    CHECK(env.runway_condition == 5);
+    fh::apply_ios_command(fh::parse_ios_json("/api/v1/weather", "{\"rwy_cond\":-1}"), env, nullptr);
+    CHECK(env.runway_condition == 0);
+    fh::apply_ios_command(fh::parse_ios_json("/api/v1/rwy-cond", "{\"condition\":2}"), env, nullptr);
+
+    fh::Frame f;
+    f.lat = 40.64;
+    f.lon = -73.78;
+    f.alt_ft = 50;
+    f.hdg = 31;
+    auto dg = fh::build_frame_datagram(f, 1, env, s376::xt4::WordOrder::Le, s376::xt4::FloatFmt::Ieee);
+    s376::xt4::Decoder dec;
+    auto parsed = dec.parse(dg.data(), dg.size());
+    CHECK(parsed.has_value());
+    bool saw = false;
+    s376::xt4::Env wire{};
+    for (const auto& pk : parsed->packets) {
+        if (pk.type != s376::xt4::kTypeEnv)
+            continue;
+        CHECK(pk.body() && pk.body_words() > 7);
+        CHECK(s376::xt4::s16(pk.body()[7]) == 2);
+        wire = s376::xt4::decode_env(pk, dec.locked_fmt());
+        saw = true;
+    }
+    CHECK(saw);
+    CHECK(wire.runway_condition == 2);
+
+    s376::SharedState st;
+    s376::HostState snap;
+    st.apply(*parsed, dec, "127.0.0.1:9", 1, snap);
+    CHECK(snap.have_env);
+    CHECK(snap.env.runway_condition == 2);
+    NEAR(s376::runway_wetness(snap.env.runway_condition), 0.75, 1e-6);
+    NEAR(s376::runway_wetness(0), 0.0, 1e-6);
+    NEAR(s376::runway_wetness(1), 0.35, 1e-6);
+    NEAR(s376::runway_wetness(3), 1.0, 1e-6);
+    NEAR(s376::runway_wetness(5), 1.0, 1e-6);
+
+    fh::IosStatus stj;
+    stj.rwy_cond = 2;
+    const auto js = fh::ios_status_json(stj);
+    CHECK(js.find("\"rwy_cond\":2") != std::string::npos);
+}
+
+#ifndef _WIN32
 // Real renderer binary, headless, loopback: s376-visual --headless
 // --no-control --bind 127.0.0.1:2300 and s376-fakehost --check.
 static void test_binary_e2e(const char* visual) {
@@ -467,21 +840,34 @@ static void test_binary_e2e(const char* visual) {
     CHECK(rc == 0);
     CHECK(out.find("TOUCHDOWN") != std::string::npos);
 }
+#endif
 
 int main(int argc, char** argv) {
+#ifndef _WIN32
     std::signal(SIGPIPE, SIG_IGN);
+#endif
     test_guard();
     test_distance();
     test_profile_math();
     test_replay();
     test_wire();
     test_flight_model();
+    test_input_map();
     test_ios();
+    test_ios_json_api();
+    test_rwy_cond();
+    test_controls_replay_10s();
     test_inprocess_e2e();
+#ifndef _WIN32
     if (argc > 1)
         test_binary_e2e(argv[1]);
     else
         std::cerr << "  (binary e2e skipped: pass path to s376-visual)\n";
+#else
+    (void)argc;
+    (void)argv;
+    std::cerr << "  (POSIX binary e2e skipped on Windows; JSON+10s replay covered)\n";
+#endif
     std::cerr << "fakehost tests: " << passes << " passed, " << fails << " failed\n";
     return fails ? 1 : 0;
 }

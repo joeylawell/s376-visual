@@ -47,8 +47,10 @@ those adapters flexible.
 Windows MSVC CI (980 Ti zip) was red since the zip job: `windows.h`
 `min`/`max` macros, MSVC `__BYTE_ORDER__` both-zero `#error`, and
 `path::native()` (`wstring`) `.find("..")`. Fixed with `NOMINMAX`,
-a portable LE check, and `generic_string()`. `s376-fakehost` exe +
-tests are UNIX-gated so MSVC still builds `s376_core` / `s376-visual`.
+a portable LE check, and `generic_string()`. `s376-fakehost` and
+`s376-fakehost-tests` build on Windows (winmm + XInput yoke, Winsock
+IOS JSON API). Loopback `fakehost::guard()` is unchanged. See
+[docs/FAKEHOST_API.md](docs/FAKEHOST_API.md).
 
 **Joey priority: Oct 25 KJFK demo.** Hard deadline Sunday 2026-10-25
 for a 2-minute 04R approach + landing (day and night), believable
