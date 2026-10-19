@@ -80,6 +80,10 @@ void test_geo() {
     CHECK(s376::geo::land_coverage(37.6188, -122.3754) > 0.50); // KSFO pad
     CHECK(s376::geo::land_coverage(47.4502, -122.3088) > 0.50); // KSEA
     CHECK(s376::geo::land_coverage(0.0, -30.0) < 0.15);         // mid-Atlantic
+    // Schematic pad must sit below the KJFK field (~4 m), not cover*12 m.
+    CHECK(s376::geo::local_ground_alt_m(0.80f, 1.0, 4.0) < 3.6);
+    CHECK(s376::geo::local_ground_alt_m(0.80f, 1.0, 4.0) > 2.5);
+    CHECK(s376::geo::local_ground_alt_m(0.10f, 1.0, 4.0) < 0.5);
 
     CHECK_NEAR(s376::geo::dms_to_deg(40, 38, 23.741), 40.639928055, 1e-9);
     CHECK_NEAR(s376::geo::dms_to_deg(73, 46, 43.292, true), -73.778692222, 1e-9);

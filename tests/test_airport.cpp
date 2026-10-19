@@ -548,10 +548,11 @@ void test_airport() {
         auto p0 = s376::parse_shot_at("KJFK:04R");
         CHECK(p0.icao == "KJFK" && p0.rwy == "04R");
         CHECK_NEAR(p0.dist_nm, 0.0, 1e-9);
-        CHECK_NEAR(p0.hdg_true_deg, 31.0, 0.6);
+        CHECK_NEAR(p0.hdg_true_deg, 30.768, 0.01);
         CHECK_NEAR(p0.pitch_deg, 0.0, 1e-9);
         auto p3 = s376::parse_shot_at("kjfk:04r:3");
         CHECK_NEAR(p3.dist_nm, 3.0, 1e-9);
+        CHECK_NEAR(p3.hdg_true_deg, 30.768, 0.01);
         CHECK_NEAR(p3.pitch_deg, -3.0, 1e-6);
         CHECK(p3.alt_ft > p0.alt_ft + 800.0);
         auto lined = s376::parse_shot_at("KBOS:04R:0");

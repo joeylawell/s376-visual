@@ -260,6 +260,29 @@ float day_als_intensity(LightKind kind, float night_w) {
     return kApproachTdz[2] + (1.f - kApproachTdz[2]) * t;
 }
 
+float close_als_size_px(LightKind kind, float range_m, float size_px) {
+    if (!std::isfinite(size_px) || size_px < 0.f)
+        size_px = 0.f;
+    const bool end = kind == LightKind::End;
+    if (!is_als_family(kind) && !end)
+        return size_px;
+    if (!std::isfinite(range_m) || range_m >= 800.f)
+        return size_px;
+    const float cap = end ? 4.5f : 3.0f;
+    const float t = std::max(0.f, std::min(1.f, range_m / 800.f));
+    const float c = cap + (size_px - cap) * t * t;
+    return std::min(size_px, std::max(2.2f, c));
+}
+
+float close_als_intensity(LightKind kind, float range_m) {
+    if (!is_als_family(kind))
+        return 1.f;
+    if (!std::isfinite(range_m) || range_m >= 700.f)
+        return 1.f;
+    const float t = std::max(0.f, std::min(1.f, range_m / 700.f));
+    return 0.40f + 0.60f * t * t;
+}
+
 float type_range_scale(LightKind kind) {
     switch (kind) {
     case LightKind::Approach:

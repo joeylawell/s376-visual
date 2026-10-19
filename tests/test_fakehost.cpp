@@ -6,6 +6,7 @@
 #include "s376/fakehost.hpp"
 #include "s376/geo.hpp"
 #include "s376/host.hpp"
+#include "s376/lights.hpp"
 #include "s376/state.hpp"
 #include "s376/xt4.hpp"
 
@@ -378,7 +379,7 @@ static void test_ios() {
     s376::xt4::Decoder dec;
     auto parsed = dec.parse(dg.data(), dg.size());
     CHECK(parsed.has_value());
-    bool saw70 = false;
+    bool saw70 = false, saw13l_edge = false;
     for (const auto& pk : parsed->packets) {
         if (pk.type != s376::xt4::kTypeLightSwitch)
             continue;
@@ -387,8 +388,13 @@ static void test_ios() {
             CHECK(sw.step == 5);
             saw70 = true;
         }
+        if (sw.switch_num == s376::lights::runway_switch(3, s376::lights::kOffEdge)) {
+            CHECK(sw.step == env.light_step);
+            saw13l_edge = true;
+        }
     }
     CHECK(saw70);
+    CHECK(saw13l_edge);
 }
 
 // Fly the 04R profile through the renderer's own HostReceiver (in-process,

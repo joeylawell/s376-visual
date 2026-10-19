@@ -73,6 +73,16 @@ static void check_ksea(const s376::xt4::Dcs& eye, unsigned count) {
 void test_xt4() {
     using namespace s376::xt4;
 
+    {
+        Dcs eye;
+        eye.set_true_pose(40.63, -73.78, 980.0, 30.768, -3.0, 0.0);
+        CHECK_NEAR(eye.heading_deg, -30.768, 1e-3);
+        CHECK_NEAR(eye.true_heading_deg(), 30.768, 1e-3);
+        CHECK_NEAR(eye.pitch_deg, -3.0, 1e-3);
+        CHECK_NEAR(eye.lat_deg, 40.63, 1e-9);
+        CHECK_NEAR(eye.alt_ft, 980.0, 1e-9);
+    }
+
     CHECK(build_dcs(0, 0, 0, 0, 0, 0, 1, FloatFmt::Vax).size() * 2 == 0x48);
     CHECK(build_hat_query().size() * 2 == 0x20);
     CHECK(build_lights(false, false, 0, FloatFmt::Vax).size() * 2 == 0x48);

@@ -60,6 +60,7 @@ void test_missiles();
 void test_wizard();
 void test_region();
 void test_pilot_view();
+void test_render_defects();
 
 int main() {
     test_vaxfloat();
@@ -89,6 +90,7 @@ int main() {
     test_wizard();
     test_region();
     test_pilot_view();
+    test_render_defects();
     std::cout << g_passes << " passed, " << g_fails << " failed\n";
     return g_fails ? 1 : 0;
 }

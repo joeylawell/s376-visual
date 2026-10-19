@@ -661,6 +661,8 @@ void main() {
         discard;
     float core = exp(-r2 * mix(9.0, 3.2, uNight));
     float halo = exp(-r2 * 0.40) * mix(0.0, 0.85, uNight) * uBloom;
+    // Near-eye ALS (0.5 nm) must stay a bar, not a ground-filling oval.
+    halo *= smoothstep(80.0, 700.0, vEyeDist);
     float fogH = exp(-uFogDensity * vEyeDist * 0.12);
     float f = exp(-uFogDensity * uFogDensity * vEyeDist * vEyeDist);
     float a = vCol.a * (core + halo * fogH) * clamp(f, 0.0, 1.0);
@@ -1674,7 +1676,8 @@ osg::Node* make_dem_patch(const CacheRegion& cache, float aniso = 16.f) {
 // High-res land/water patch around an airport so 12k/oblique views stay
 // sharp. Same land_coverage as the globe, so the edge is a color match
 // (no hard horizon seam). Land is raised a few metres over the ellipsoid.
-osg::Node* make_local_ground(double lat0, double lon0, double radius_km, float aniso) {
+osg::Node* make_local_ground(double lat0, double lon0, double radius_km, float aniso,
+                             double field_elev_m) {
     const int n = 80;
     const int tw = 384, th = 384;
     auto* img = new osg::Image;
@@ -1717,7 +1720,7 @@ osg::Node* make_local_ground(double lat0, double lon0, double radius_km, float a
             const float cover = geo::land_coverage(lat, lon);
             const double edge = std::max(std::fabs(u - 0.5), std::fabs(v - 0.5)) * 2.0;
             const double fade = edge > 0.82 ? std::max(0.0, 1.0 - (edge - 0.82) / 0.18) : 1.0;
-            const double z = cover * 12.0 * fade;
+            const double z = geo::local_ground_alt_m(cover, fade, field_elev_m);
             const geo::Ecef p = geo::lla_to_ecef(lat, lon, z);
             verts->push_back(ecef_to_osg(p));
             geo::Ecef e, nn, up;
@@ -1872,7 +1875,9 @@ LightGpu make_light_gpu(const Airport& apt) {
     auto* ss = g.geom->getOrCreateStateSet();
     ss->setMode(GL_BLEND, osg::StateAttribute::ON);
     ss->setAttributeAndModes(new osg::BlendFunc(GL_SRC_ALPHA, GL_ONE));
-    ss->setAttributeAndModes(new osg::Depth(osg::Depth::LEQUAL, 0, 1, false));
+    // ALWAYS: the schematic land pad used to sit above KJFK (~4 m) and
+    // fail LEQUAL for every 13L lamp. Pavement / ground must not hide HIRL.
+    ss->setAttributeAndModes(new osg::Depth(osg::Depth::ALWAYS, 0, 1, false));
     attach_points(ss, lights::kBaseSizePx);
     ss->setRenderBinDetails(20, "DepthSortedBin");
     return g;
@@ -2338,6 +2343,8 @@ void apply_light_steps(LightGpu& g, const HostState& host) {
         float sz = lights::point_size_px(tod, hat, range) * lights::type_size_boost(kind);
         sz = lights::day_als_size_px(kind, night, sz);
         k *= lights::day_als_intensity(kind, night);
+        sz = lights::close_als_size_px(kind, range, sz);
+        k *= lights::close_als_intensity(kind, range);
         if (kind == LightKind::Vasi) {
             sz = std::min(8.f, std::max(5.8f, sz));
             k = std::max(k, 1.15f); // 2W2R must bloom a little in daylight
@@ -2824,7 +2831,7 @@ class OsgRenderer final : public Renderer {
         if (!used_earth_ && tile_index_.empty()) {
             const float an = static_cast<float>(cfg.render.aniso);
             for (const auto& apt : all_public_airports()) {
-                if (auto* g = make_local_ground(apt.arp_lat, apt.arp_lon, 40.0, an)) {
+                if (auto* g = make_local_ground(apt.arp_lat, apt.arp_lon, 40.0, an, apt.elev_m)) {
                     casters_->addChild(g);
                     S376_LOG_INFO("render", "%s local ground  40 km", apt.icao.c_str());
                 }

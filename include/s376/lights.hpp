@@ -82,6 +82,10 @@ float day_als_size_px(LightKind kind, float night_w, float size_px);
 // Day intensity scale (1 at night). ALS family uses published step 3
 // (kApproachTdz[2] = 0.50) at noon — step 1 (0.27) is too faint by day.
 float day_als_intensity(LightKind kind, float night_w);
+// 0.5–1 nm ALSF-2: hundreds of near additive discs became a ground oval.
+// Ease size/intensity down inside ~800 m; End (green bar) size-only.
+float close_als_size_px(LightKind kind, float range_m, float size_px);
+float close_als_intensity(LightKind kind, float range_m);
 // PAPI optical center above the runway (JO 6850.2C HG4), feet.
 constexpr double kPapiOpticalHtFt = 2.0;
 float max_range_m();

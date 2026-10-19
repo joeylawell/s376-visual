@@ -6,6 +6,7 @@
 #include "s376/fakehost.hpp"
 
 #include "s376/geo.hpp"
+#include "s376/lights.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -816,8 +817,13 @@ std::vector<std::uint8_t> build_frame_datagram(const Frame& f, unsigned count,
     }
     if (count == 1 || count % 100 == 2) {
         pk.push_back(xt4::build_display(true));
-        for (int sw = 1; sw <= 4; ++sw) // same switch numbers as s376-synth
-            pk.push_back(xt4::build_light_switch(sw, env.light_step));
+        // Every runway group (04L/04R/13L/13R), not just switches 1–4
+        // (those only cover 04L). Default step lights 13L at tod 19.
+        for (int k = 1; k <= 4; ++k) {
+            for (int off = 1; off <= 8; ++off)
+                pk.push_back(xt4::build_light_switch(s376::lights::runway_switch(k, off),
+                                                    env.light_step));
+        }
         pk.push_back(xt4::build_light_switch(70, env.lead_in_step)); // 13L RLLS lead-in
     }
     return xt4::build_datagram(pk, wo);

@@ -2215,11 +2215,25 @@ AirportMesh build_airport_mesh(const Airport& a, bool buildings, bool markings) 
             const double hdg = wrap360(geo::rad2deg(std::atan2(dlon, dlat)));
             strip_quad(mesh, lat0, lon0, lat1, lon1, hdg, tx.width_m * 0.5, a.elev_m + 0.58,
                        a.elev_m + 0.58, 0.38f, 0.38f, 0.36f, 2.f);
-            if (markings) {
-                mark_rect(mesh, lat0, lon0, hdg, a.elev_m + 0.46, 78.0, 79.2, -tx.width_m * 0.45,
-                          tx.width_m * 0.45, 0.92f, 0.78f, 0.12f);
-                mark_rect(mesh, lat0, lon0, hdg, a.elev_m + 0.46, 80.4, 81.6, -tx.width_m * 0.45,
-                          tx.width_m * 0.45, 0.92f, 0.78f, 0.12f);
+            const double seg = std::hypot(dlat, dlon);
+            if (markings && seg > 20.0) {
+                // Hold bars sit on the segment, never past the pavement or
+                // over water (13L 0.5 nm was painting yellow into the bay).
+                const double a0 = std::min(78.0, std::max(1.0, seg - 4.0));
+                const double a1 = std::min(a0 + 1.2, seg - 1.5);
+                const double a2 = std::min(a0 + 2.4, seg - 2.7);
+                const double a3 = std::min(a2 + 1.2, seg - 1.0);
+                double mlat, mlon;
+                offset_m(lat0, lon0, hdg, 0.5 * (a0 + a3), mlat, mlon);
+                if (a1 > a0 && geo::land_coverage(mlat, mlon) >= 0.50f &&
+                    geo::land_coverage(lat0, lon0) >= 0.45f &&
+                    geo::land_coverage(lat1, lon1) >= 0.45f) {
+                    mark_rect(mesh, lat0, lon0, hdg, a.elev_m + 0.46, a0, a1, -tx.width_m * 0.45,
+                              tx.width_m * 0.45, 0.92f, 0.78f, 0.12f);
+                    if (a3 > a2)
+                        mark_rect(mesh, lat0, lon0, hdg, a.elev_m + 0.46, a2, a3,
+                                  -tx.width_m * 0.45, tx.width_m * 0.45, 0.92f, 0.78f, 0.12f);
+                }
             }
         }
     }

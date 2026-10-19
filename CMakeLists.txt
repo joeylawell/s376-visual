@@ -230,6 +230,7 @@ add_executable(s376-tests
     tests/test_wizard.cpp
     tests/test_region.cpp
     tests/test_pilot_view.cpp
+    tests/test_render_defects.cpp
 )
 target_link_libraries(s376-tests PRIVATE s376_core)
 

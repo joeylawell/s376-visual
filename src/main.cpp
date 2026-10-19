@@ -75,8 +75,10 @@ void usage() {
            "  --reply-master NAME   only this --channel sends the type-200 HAT reply\n"
            "  --no-hat              never send HAT (overrides reply_master)\n"
            "  --screenshot PATH     write the first channel (PPM+PNG) after warmup and exit\n"
+           "                        with --at/--approach, or a live fakehost-driven run\n"
            "                        (--channel all: Left|Front|Right strip)\n"
            "  --screenshot-wait SEC settle time before capture (default 3; pager idle or this)\n"
+           "  --screenshot-at-frame N  capture after N frames (default 8; live or shot)\n"
            "  --self-test-shot DIR  render a known solid/gradient, check pixels, write files\n"
            "  --approach ICAO:RWY   scripted straight glidepath to touchdown (KJFK:04R)\n"
            "  --start-agl FT        approach start AGL (default 2000)\n"
@@ -109,12 +111,7 @@ s376::HostState host_from_shot(const s376::ShotPose& p) {
     h.have_eyepoint = true;
     h.eye.csn = s376::xt4::kEyepointCsn;
     h.eye.minor_csn = -1;
-    h.eye.lat_deg = p.lat;
-    h.eye.lon_deg = p.lon;
-    h.eye.alt_ft = p.alt_ft;
-    h.eye.heading_deg = static_cast<float>(-p.hdg_true_deg);
-    h.eye.pitch_deg = static_cast<float>(p.pitch_deg);
-    h.eye.roll_deg = static_cast<float>(p.roll_deg);
+    h.eye.set_true_pose(p.lat, p.lon, p.alt_ft, p.hdg_true_deg, p.pitch_deg, p.roll_deg);
     h.eyepoints = 1;
     h.datagrams = 0;
     h.last_peer = "shot";
@@ -157,6 +154,7 @@ int main(int argc, char** argv) {
     std::string screenshot_path;
     std::string self_test_shot;
     double screenshot_wait = 3.0;
+    int screenshot_at_frame = 8;
     std::string at_spec;
     std::string approach_spec;
     std::string record_path;
@@ -256,6 +254,8 @@ int main(int argc, char** argv) {
             screenshot_path = need(a.c_str());
         else if (a == "--screenshot-wait")
             screenshot_wait = std::stod(need(a.c_str()));
+        else if (a == "--screenshot-at-frame")
+            screenshot_at_frame = std::max(1, std::stoi(need(a.c_str())));
         else if (a == "--self-test-shot")
             self_test_shot = need(a.c_str());
         else if (a == "--at")
@@ -566,11 +566,6 @@ int main(int argc, char** argv) {
             }
         }
     }
-    if (!screenshot_path.empty() && !have_shot && self_test_shot.empty()) {
-        std::cerr << "--screenshot needs --at ICAO[:RWY[:dist_nm]] or --approach ICAO:RWY\n";
-        s376::log::shutdown();
-        return 2;
-    }
     if ((!screenshot_path.empty() || !record_path.empty()) && channel_name.empty())
         channel_name = s376::default_shot_channel(cfg);
     if (!screenshot_path.empty()) {
@@ -661,10 +656,11 @@ int main(int argc, char** argv) {
                   dem->south, dem->east, dem->north);
     std::thread synth_th;
     // Bare --demo and --demo kjfk both open a loopback host socket.
-    // --at / --screenshot / --self-test-shot pose the eye themselves.
+    // --at / --self-test-shot / --record pose the eye themselves.
+    // --screenshot without --at is a live (fakehost-driven) capture.
     const bool live_host =
         (demo && record_path.empty()) ||
-        (!have_shot && screenshot_path.empty() && self_test_shot.empty() && record_path.empty());
+        (!have_shot && self_test_shot.empty() && record_path.empty());
     if (have_shot && !live_host)
         S376_LOG_INFO("ig", "--at: no host socket (datagrams not required)");
     if (live_host) {
@@ -967,9 +963,11 @@ int main(int argc, char** argv) {
             rend->request_stop();
             break;
         }
-        if (!screenshot_path.empty() && frames >= 8) {
+        if (!screenshot_path.empty() && frames >= screenshot_at_frame) {
             const double waited =
                 std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+            if (live_host && !host.have_eyepoint && waited < screenshot_wait)
+                continue;
             if (!rend->pager_idle() && waited < screenshot_wait)
                 continue;
             if (!rend->capture(screenshot_path)) {

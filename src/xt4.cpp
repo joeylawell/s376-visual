@@ -337,6 +337,16 @@ double Dcs::true_heading_deg() const {
     return h;
 }
 
+void Dcs::set_true_pose(double lat, double lon, double alt_ft_msl, double true_hdg_deg,
+                        double pitch_deg_in, double roll_deg_in) {
+    lat_deg = lat;
+    lon_deg = lon;
+    alt_ft = alt_ft_msl;
+    heading_deg = static_cast<float>(-true_hdg_deg);
+    pitch_deg = static_cast<float>(pitch_deg_in);
+    roll_deg = static_cast<float>(roll_deg_in);
+}
+
 Dcs decode_dcs(const Packet& p, FloatFmt fmt) {
     Dcs d;
     const auto* b = p.body();

@@ -120,6 +120,13 @@ void test_lights() {
     CHECK(day_als_size_px(s376::LightKind::Approach, 0.f, 8.f) >= 2.4f);
     CHECK_NEAR(day_als_size_px(s376::LightKind::Approach, 1.f, 8.f), 8.0, 1e-4);
     CHECK_NEAR(day_als_size_px(s376::LightKind::Vasi, 0.f, 6.4f), 6.4, 1e-4);
+    CHECK(close_als_size_px(s376::LightKind::Approach, 150.f, 8.f) < 4.0f);
+    CHECK(close_als_size_px(s376::LightKind::Approach, 150.f, 8.f) >= 2.2f);
+    CHECK_NEAR(close_als_size_px(s376::LightKind::Approach, 2000.f, 8.f), 8.0, 1e-4);
+    CHECK(close_als_intensity(s376::LightKind::Approach, 150.f) < 0.55f);
+    CHECK_NEAR(close_als_intensity(s376::LightKind::Approach, 2000.f), 1.0, 1e-4);
+    CHECK_NEAR(close_als_intensity(s376::LightKind::Edge, 150.f), 1.0, 1e-4);
+    CHECK(close_als_size_px(s376::LightKind::End, 200.f, 8.f) <= 5.0f);
     // JO 6850.2C: inboard (box 0) is HIGHEST. On path: 2 inner red, 2 outer white.
     CHECK(!papi_box_white(3.0f, 0, 3.0f) && !papi_box_white(3.0f, 1, 3.0f));
     CHECK(papi_box_white(3.0f, 2, 3.0f) && papi_box_white(3.0f, 3, 3.0f));

@@ -129,4 +129,18 @@ ProjectedPoint project_lla(const ChannelView& v, double lat_deg, double lon_deg,
 // Public geography only (coarse continents + a few US coastal cutouts).
 float land_coverage(double lat_deg, double lon_deg);
 
+// Schematic 40 km pad under an airport when no packed DEM is loaded.
+// Water sits below the field; land sits below pavement so HIRL / ALS / PAPI
+// are not buried. The old `cover * 12` m MSL plateau hid every 13L lamp
+// (KJFK field is ~4 m) while 04R ALS over the bay still read as lit.
+inline double local_ground_alt_m(float cover, double fade, double field_elev_m) {
+    const double c = cover < 0.f ? 0.0 : (cover > 1.f ? 1.0 : static_cast<double>(cover));
+    const double f = fade < 0.0 ? 0.0 : (fade > 1.0 ? 1.0 : fade);
+    if (c < 0.35) {
+        const double w = field_elev_m - 2.5;
+        return (w < 0.25 ? w : 0.25) * f;
+    }
+    return (field_elev_m - 0.55) * f;
+}
+
 } // namespace s376::geo

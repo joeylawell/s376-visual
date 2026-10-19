@@ -85,6 +85,9 @@ struct Dcs {
     double timestamp = 0;
 
     double true_heading_deg() const;
+    // --at / IG shot: store xT4 heading as the negation of true heading.
+    void set_true_pose(double lat, double lon, double alt_ft_msl, double true_hdg_deg,
+                       double pitch_deg_in, double roll_deg_in);
     bool is_eyepoint() const { return csn == kEyepointCsn && minor_csn == -1; }
 };
 
