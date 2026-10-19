@@ -227,14 +227,17 @@ std::string format_gpu_pass_table(float measured_ms, bool shadows_on) {
     const float scale = (measured_ms > 0.f && budgeted > 0.f) ? (measured_ms / budgeted) : 1.f;
     std::ostringstream o;
     o << std::fixed << std::setprecision(2);
-    o << "pass\tbudget_ms\tscaled_ms\n";
-    o << "base\t6.00\t" << (6.0f * scale) << "\n";
+    o << "# scaled_ms is an ESTIMATE: budget share prorated to the "
+         "GL_TIME_ELAPSED total. total is the timer-query measurement.\n";
+    o << "pass\tbudget_ms\tscaled_ms\tnote\n";
+    o << "base\t6.00\t" << (6.0f * scale) << "\testimate\n";
     for (int i = 0; i < n; ++i) {
         if (std::strcmp(b[i].name, "shadows") == 0 && !shadows_on)
             continue;
-        o << b[i].name << "\t" << b[i].gpu_ms << "\t" << (b[i].gpu_ms * scale) << "\n";
+        o << b[i].name << "\t" << b[i].gpu_ms << "\t" << (b[i].gpu_ms * scale) << "\testimate\n";
     }
-    o << "total\t" << budgeted << "\t" << (measured_ms >= 0.f ? measured_ms : budgeted) << "\n";
+    o << "total\t" << budgeted << "\t" << (measured_ms >= 0.f ? measured_ms : budgeted) << "\t"
+      << (measured_ms >= 0.f ? "gpu_timer" : "estimate") << "\n";
     o << format_gta_stack_lines(shadows_on);
     return o.str();
 }
@@ -257,12 +260,12 @@ std::string format_gta_stack_lines(bool shadows_on) {
     const float aa = find_ms("taa") + find_ms("fxaa");
     std::ostringstream o;
     o << std::fixed << std::setprecision(2);
-    o << "gta\tcsm_shadows\t" << csm << "\n";
-    o << "gta\thdr_bloom\t" << bloom << "\n";
-    o << "gta\tssao\t" << ssao << "\n";
-    o << "gta\twet_runway\t" << wet << "\n";
-    o << "gta\thaze\t" << haze << "\n";
-    o << "gta\tstable_aa\t" << aa << "\n";
+    o << "gta\tcsm_shadows\t" << csm << "\testimate\n";
+    o << "gta\thdr_bloom\t" << bloom << "\testimate\n";
+    o << "gta\tssao\t" << ssao << "\testimate\n";
+    o << "gta\twet_runway\t" << wet << "\testimate\n";
+    o << "gta\thaze\t" << haze << "\testimate\n";
+    o << "gta\tstable_aa\t" << aa << "\testimate\n";
     return o.str();
 }
 

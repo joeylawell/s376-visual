@@ -295,7 +295,7 @@ void test_airport() {
     CHECK_NEAR(jfk.runways[3].he_displaced_ft, 3264.0, 0.5);
     CHECK(jfk.runways[1].emas_le && jfk.runways[1].emas_he);
     CHECK(jfk.runways[2].papi_he == "P4R");
-    CHECK(jfk.runways[3].papi_count_le == 2);
+    CHECK(jfk.runways[3].papi_count_le == 1);
     CHECK_NEAR(jfk.arp_lat, 40.639928, 1e-5);
     CHECK_NEAR(jfk.runways[3].length_m, 14511.0 * s376::geo::kFtToM, 8.0);
     CHECK(!jfk.source.name.empty());

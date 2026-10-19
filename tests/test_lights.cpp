@@ -112,7 +112,9 @@ void test_lights() {
     CHECK(!is_als_family(s376::LightKind::Vasi));
     CHECK(!is_als_family(s376::LightKind::Edge));
     CHECK_NEAR(day_als_intensity(s376::LightKind::Approach, 1.f), 1.0, 1e-4);
-    CHECK_NEAR(day_als_intensity(s376::LightKind::Approach, 0.f), 0.28, 1e-4);
+    CHECK_NEAR(day_als_intensity(s376::LightKind::Approach, 0.f), s376::lights::kApproachTdz[2],
+               1e-4);
+    CHECK(day_als_intensity(s376::LightKind::Approach, 0.f) > s376::lights::kApproachTdz[0] + 0.1f);
     CHECK_NEAR(day_als_intensity(s376::LightKind::Edge, 0.f), 1.0, 1e-4);
     CHECK(day_als_size_px(s376::LightKind::Approach, 0.f, 8.f) <= 3.2f);
     CHECK(day_als_size_px(s376::LightKind::Approach, 0.f, 8.f) >= 2.4f);
@@ -129,6 +131,18 @@ void test_lights() {
         // Eye 1 km south of a PAPI, 52.4 m above it → atan(52.4/1000) ≈ 3°.
         const float ang = papi_eye_angle_deg(40.63, -73.78, 52.4, 40.639, -73.78, 0.0);
         CHECK_NEAR(ang, 3.0, 0.15);
+        // +az = right of CL on the approach. Eye 30 m landing-right of a
+        // 400 m approach point must be positive; landing-left negative.
+        {
+            const double plat = 40.639, plon = -73.78, hdg = 31.0;
+            double clat, clon, rlat, rlon, llat, llon;
+            s376::offset_m(plat, plon, hdg + 180.0, 400.0, clat, clon);
+            s376::offset_m(clat, clon, hdg + 90.0, 30.0, rlat, rlon);
+            s376::offset_m(clat, clon, hdg - 90.0, 30.0, llat, llon);
+            CHECK(papi_azimuth_deg(rlat, rlon, plat, plon, static_cast<float>(hdg)) > 2.f);
+            CHECK(papi_azimuth_deg(llat, llon, plat, plon, static_cast<float>(hdg)) < -2.f);
+            CHECK_NEAR(papi_azimuth_deg(clat, clon, plat, plon, static_cast<float>(hdg)), 0.0, 0.5);
+        }
         CHECK(!papi_box_white(ang, 0, 3.0f) && !papi_box_white(ang, 1, 3.0f));
         CHECK(papi_box_white(ang, 2, 3.0f) && papi_box_white(ang, 3, 3.0f));
     }
@@ -169,7 +183,7 @@ void test_lights() {
             if (L.kind != s376::LightKind::Vasi || L.papi_box < 0 || L.papi_box > 3)
                 continue;
             if (s376::geo::ground_distance_m(tlat, tlon, L.lat, L.lon) > 500.0)
-                continue; // 04R PAPI is ~1317 ft / 401 m past the THR
+                continue; // 04R PAPI is ~(69-2)/tan(3°) ft past the THR
             const auto pr = s376::geo::project_lla(view, L.lat, L.lon, L.alt_m, 1920, 1200);
             const float ang = papi_eye_angle_deg(pose.lat, pose.lon, pose.alt_ft * s376::geo::kFtToM,
                                                  L.lat, L.lon, L.alt_m);

@@ -53,7 +53,7 @@ void test_accuracy() {
     const auto* r13l = s376::faa_end(jfk_faa, "13L");
     CHECK(r13l && r13l->width_ft == 200.0 && r13l->als == "ALSF-2");
     const auto* r13r = s376::faa_end(jfk_faa, "13R");
-    CHECK(r13r && r13r->als == "RLLS" && r13r->papi == "P4L+P4L");
+    CHECK(r13r && r13r->als == "RLLS" && r13r->papi == "P4L");
     const auto* r31r = s376::faa_end(jfk_faa, "31R");
     CHECK(r31r && r31r->als == "MALSR" && r31r->papi == "P4R");
     const auto* r04r = s376::faa_end(jfk_faa, "04R");

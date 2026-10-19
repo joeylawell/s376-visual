@@ -79,8 +79,11 @@ float type_range_scale(LightKind kind); // 1 = full kMaxRangeFt
 bool is_als_family(LightKind kind);
 // Day size cap (px) so 0.6 nm noon ALS is a bar, not a bay flare.
 float day_als_size_px(LightKind kind, float night_w, float size_px);
-// Day intensity scale (1 at night). ALS family is ~0.28 at noon.
+// Day intensity scale (1 at night). ALS family uses published step 3
+// (kApproachTdz[2] = 0.50) at noon — step 1 (0.27) is too faint by day.
 float day_als_intensity(LightKind kind, float night_w);
+// PAPI optical center above the runway (JO 6850.2C HG4), feet.
+constexpr double kPapiOpticalHtFt = 2.0;
 float max_range_m();
 // Inverse-square-ish fade; approach/PAPI keep a readable floor at 3 nm.
 float range_visibility(LightKind kind, float range_m);
@@ -100,7 +103,8 @@ float papi_azimuth_deg(double eye_lat, double eye_lon, double papi_lat, double p
 bool papi_in_coverage(double eye_lat, double eye_lon, double papi_lat, double papi_lon,
                       float rwy_hdg_deg, float rotate_deg, float usable_left_deg,
                       float usable_right_deg);
-// Flat-runway PAPI distance past the landing THR: TCH / tan(GPA).
+// Flat-runway PAPI lamp station past the landing THR:
+// (TCH − kPapiOpticalHtFt) / tan(GPA) so TCH at the threshold is official ±1 ft.
 double papi_distance_ft(double vgsi_tch_ft, double gs_deg);
 
 bool beacon_on(double t_s);

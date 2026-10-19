@@ -32,7 +32,7 @@ CI (`s376-tests` → `test_accuracy`) fails if any of these slip:
 | Runway heading vs WGS84 geodesic of the two FAA ends | 0.1° |
 | Displaced threshold vs FAA | 3 m |
 | Approach-light type (NONE / ALSF-2 / ALSF-1 / MALSR / MALSF / MALS / SALS / RLLS / CAT-I / CAT-II) | exact |
-| PAPI side (P4L / P4R / P4L+P4L) and angle | exact / 0.05° |
+| PAPI side (P4L / P4R) and angle | exact / 0.05° |
 | Airport imagery geotransform vs runway geometry | 1 m |
 | Terrain elevation at each runway end vs FAA orthometric | 1 m |
 
@@ -111,7 +111,7 @@ copied across a pair). We do not copy RSI / CAE coordinates.
 | 31R ALS | MALSR | **MALSR** (bars 200–1400 ft, RAIL 1600–2400) | Not a single row + bar |
 | 13R ALS | ALSF-2 | **RLLS** (lead-in groups) | Charted runway lead-in lighting, not ALSF-2 |
 | 31L ALS | ALSF-2 | **NONE** | FAA: no ALS on 31L |
-| PAPI | Missing or one generic VASI | P4L on seven ends, **P4R on 31R**, **two P4L on 13R**, all **3.00°** | AIP AD 2.14 |
+| PAPI | Missing or one generic VASI | P4L on seven ends, **P4R on 31R**, **one P4L on 13R** aimed 22° left, all **3.00°** | AIP AD 2.14 / Chart Supplement |
 | TDZ lights | Missing | 04R, 22L, 13L | Charted touchdown-zone |
 | EMAS | Missing | DER 4R **393×226 ft**, DER 22L **405×226 ft** | AIP general remarks |
 | KEWR | Not in the public Raster-replacement set | Full FAA both-end layout | 4L/22R 11000×150 MALSR; 4R/22L 9999×150 ALSF-2; 11/29 6725×150 REIL+PAPI+EMAS |

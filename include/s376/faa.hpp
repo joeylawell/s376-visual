@@ -26,7 +26,7 @@ struct FaaEnd {
     double width_ft = 0;
     double displaced_ft = 0;
     std::string als;  // NONE | ALSF-2 | ALSF-1 | MALSR | MALSF | MALS | SALS | RLLS | CAT-I | CAT-II
-    std::string papi; // P4L | P4R | P4L+P4L
+    std::string papi; // P4L | P4R
     double papi_deg = 3.0;
     double vgsi_tch_ft = 0; // published VGSI TCH; 0 = default 50 ft
     double ils_tch_ft = 0;  // plate ILS TCH; 0 = generic 1000 ft aim

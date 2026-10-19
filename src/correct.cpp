@@ -193,48 +193,69 @@ void paint_mark_rect(Pix& im, const GeoBox& box, double lat, double lon, double 
 void paint_official_markings(Pix& im, const GeoBox& box, const Runway& rw) {
     const double half = rw.width_m * 0.5;
     constexpr std::uint8_t wr = 247, wg = 247, wb = 242;
-    constexpr std::uint8_t yr = 235, yg = 199, yb = 31;
+    const double cl_h = 0.5 * kCenterlineWidthIn * 0.0254;
     paint_mark_rect(im, box, rw.le_lat, rw.le_lon, rw.heading_deg, 0, rw.length_m, half - 1.1,
                     half - 0.15, wr, wg, wb);
     paint_mark_rect(im, box, rw.le_lat, rw.le_lon, rw.heading_deg, 0, rw.length_m, -(half - 0.15),
                     -(half - 1.1), wr, wg, wb);
     for (double d = 12; d < rw.length_m - 20; d += 60.0)
         paint_mark_rect(im, box, rw.le_lat, rw.le_lon, rw.heading_deg, d,
-                        std::min(d + 36.0, rw.length_m - 8), -0.22, 0.22, wr, wg, wb);
+                        std::min(d + 36.0, rw.length_m - 8), -cl_h, cl_h, wr, wg, wb);
 
     auto one_end = [&](double lat, double lon, double hdg, double disp_ft) {
         const double disp_m = disp_ft * geo::kFtToM;
         if (disp_m > 8.0) {
-            // Yellow chevrons / arrows in the displaced area (official THR).
-            for (double d = 12.0; d < disp_m - 8.0; d += 24.0) {
-                paint_mark_rect(im, box, lat, lon, hdg, d, d + 10.0, 4.0, 14.0, yr, yg, yb);
-                paint_mark_rect(im, box, lat, lon, hdg, d, d + 10.0, -14.0, -4.0, yr, yg, yb);
-                paint_mark_rect(im, box, lat, lon, hdg, d + 2.0, d + 12.0, -1.2, 1.2, yr, yg, yb);
+            const double step = 100.0 * geo::kFtToM;
+            for (double d = 20.0 * geo::kFtToM; d < disp_m - 25.0 * geo::kFtToM; d += step) {
+                paint_mark_rect(im, box, lat, lon, hdg, d, d + 18.0 * geo::kFtToM, -cl_h, cl_h, wr,
+                                wg, wb);
+                paint_mark_rect(im, box, lat, lon, hdg, d + 14.0 * geo::kFtToM,
+                                d + 28.0 * geo::kFtToM, 2.0, 8.0, wr, wg, wb);
+                paint_mark_rect(im, box, lat, lon, hdg, d + 14.0 * geo::kFtToM,
+                                d + 28.0 * geo::kFtToM, -8.0, -2.0, wr, wg, wb);
             }
             offset_m(lat, lon, hdg, disp_m, lat, lon);
+            const double bar = kDisplacedThresholdBarFt * geo::kFtToM;
+            paint_mark_rect(im, box, lat, lon, hdg, 0.0, bar, -(half - 0.3), half - 0.3, wr, wg, wb);
         }
-        const int nb = rw.width_m >= 55.0 ? 12 : 8;
-        const double bar_w = 1.8;
+        const int nb = threshold_stripe_count(rw.width_m);
+        const double bar_w = 5.75 * geo::kFtToM;
+        const double stripe0 = (disp_m > 8.0 ? kDisplacedThresholdBarFt * geo::kFtToM : 0.0) + 1.0;
+        const double stripe1 = stripe0 + 150.0 * geo::kFtToM;
         const double span = half - 2.0;
         for (int i = 0; i < nb; ++i) {
             const double t = (i + 0.5) / nb;
             const double x = -span + t * 2.0 * span;
             if (std::fabs(x) < 3.0)
                 continue;
-            paint_mark_rect(im, box, lat, lon, hdg, 3.0, 48.0, x - bar_w * 0.5, x + bar_w * 0.5, wr,
-                            wg, wb);
+            paint_mark_rect(im, box, lat, lon, hdg, stripe0, stripe1, x - bar_w * 0.5,
+                            x + bar_w * 0.5, wr, wg, wb);
         }
-        const double aim = rw.length_m >= 2400.0 ? 400.0 : 300.0;
-        if (rw.length_m > aim + 80.0) {
-            paint_mark_rect(im, box, lat, lon, hdg, aim, aim + 45.0, 6.0, 15.0, wr, wg, wb);
-            paint_mark_rect(im, box, lat, lon, hdg, aim, aim + 45.0, -15.0, -6.0, wr, wg, wb);
+        const double aim0 = kAimingPointStartFt * geo::kFtToM;
+        const double aim1 = aim0 + kAimingPointLenFt * geo::kFtToM;
+        const double aim_in = 0.5 * kAimingPointInnerFt * geo::kFtToM;
+        const double aim_out = aim_in + kAimingPointWidthFt * geo::kFtToM;
+        if (rw.length_m > aim1 + 80.0) {
+            paint_mark_rect(im, box, lat, lon, hdg, aim0, aim1, aim_in, aim_out, wr, wg, wb);
+            paint_mark_rect(im, box, lat, lon, hdg, aim0, aim1, -aim_out, -aim_in, wr, wg, wb);
         }
-        for (int k = 1; k <= 5; ++k) {
-            const double d = 150.0 * k;
-            if (d + 20.0 >= rw.length_m * 0.45)
+        const double bar_len = 75.0 * geo::kFtToM;
+        const double tdz_w = 6.0 * geo::kFtToM;
+        const double tdz_gap = 5.0 * geo::kFtToM;
+        const double tdz_inner = 36.0 * geo::kFtToM;
+        for (int s = 0; s < 5; ++s) {
+            const double d = kTdzStationFt[s] * geo::kFtToM;
+            if (d + bar_len >= rw.length_m * 0.45)
                 break;
-            paint_mark_rect(im, box, lat, lon, hdg, d, d + 22.0, 8.0, 14.0, wr, wg, wb);
-            paint_mark_rect(im, box, lat, lon, hdg, d, d + 22.0, -14.0, -8.0, wr, wg, wb);
+            const int nbar = kTdzBarCounts[s];
+            for (int side = -1; side <= 1; side += 2) {
+                for (int b = 0; b < nbar; ++b) {
+                    const double inner = tdz_inner + b * (tdz_w + tdz_gap);
+                    const double x0 = side > 0 ? inner : -(inner + tdz_w);
+                    const double x1 = side > 0 ? inner + tdz_w : -inner;
+                    paint_mark_rect(im, box, lat, lon, hdg, d, d + bar_len, x0, x1, wr, wg, wb);
+                }
+            }
         }
     };
     one_end(rw.le_lat, rw.le_lon, rw.heading_deg, rw.le_displaced_ft);

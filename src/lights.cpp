@@ -196,8 +196,10 @@ float papi_azimuth_deg(double eye_lat, double eye_lon, double papi_lat, double p
     if (!(dist > 1.0) || !std::isfinite(dist))
         return 0.f;
     // From the PAPI, the approach is back along rwy_hdg + 180.
-    // atan2(across, toward-approach) so + is right of CL on the approach.
-    const double rel = geo::wrap180(brg - (static_cast<double>(rwy_hdg_deg) + 180.0));
+    // +az = right of the extended CL as seen on the approach (looking
+    // along the landing heading). brg is PAPI→eye; negate so an on-CL
+    // aircraft to the right of a left-side P4L is +az, not unusable-left.
+    const double rel = geo::wrap180((static_cast<double>(rwy_hdg_deg) + 180.0) - brg);
     return static_cast<float>(rel);
 }
 
@@ -216,7 +218,11 @@ double papi_distance_ft(double vgsi_tch_ft, double gs_deg) {
         vgsi_tch_ft = 50.0;
     if (!(gs_deg > 0.25) || !std::isfinite(gs_deg))
         gs_deg = 3.0;
-    return vgsi_tch_ft / std::tan(geo::deg2rad(gs_deg));
+    // Flat-runway lamp station: TCH = optical_ht + D·tan(GPA). A 2 ft
+    // optical center (JO 6850.2C HG4) must be subtracted or TCH reads
+    // official+height (the 5.7 ft bug).
+    const double rise = std::max(1.0, vgsi_tch_ft - kPapiOpticalHtFt);
+    return rise / std::tan(geo::deg2rad(gs_deg));
 }
 
 float type_size_boost(LightKind kind) {
@@ -249,7 +255,9 @@ float day_als_intensity(LightKind kind, float night_w) {
     if (!is_als_family(kind) || night_w >= 0.20f)
         return 1.f;
     const float t = night_w / 0.20f;
-    return 0.28f + 0.72f * t;
+    // Noon floor = published approach step 3 (0.50), not step 1 (0.27).
+    // Step 1 is too faint for day ops; the size cap still kills the flare.
+    return kApproachTdz[2] + (1.f - kApproachTdz[2]) * t;
 }
 
 float type_range_scale(LightKind kind) {

@@ -138,6 +138,9 @@ void test_diagnostics() {
         const auto passes = s376::format_gpu_pass_table(8.4f, false);
         CHECK(passes.find("atmosphere") != std::string::npos);
         CHECK(passes.find("total") != std::string::npos);
+        CHECK(passes.find("estimate") != std::string::npos);
+        CHECK(passes.find("gpu_timer") != std::string::npos);
+        CHECK(passes.find("ESTIMATE") != std::string::npos);
         CHECK(passes.find("\tshadows\t") == std::string::npos);
         CHECK(passes.find("gta") != std::string::npos);
         CHECK(passes.find("csm_shadows") != std::string::npos);

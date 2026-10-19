@@ -29,6 +29,9 @@ data/airports/*.osm.json
 config/local*.toml
 config/wizard-local.toml
 
+# Screenshot sidecar (s376-visual writes PPM+PNG; commit only the PNGs)
+/docs/frames/*.ppm
+
 # Phone photos of the live Raster — reference only, never commit
 /refs/
 refs/*.jpg

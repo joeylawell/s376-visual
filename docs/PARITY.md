@@ -72,7 +72,7 @@ type, PAPI side, length). Tracked in code (`s376::scenery_parity_items`,
 | ALSF-2 + flashers | 04R/22L/13L + EWR 04R/22L | **ok** | Standard 2400 ft bars, not a single row |
 | MALSR + RAIL | 31R + EWR 04L/22R | **ok** | |
 | RLLS | 13R | **ok** | Lead-in groups |
-| PAPI all ends | yes | **ok** | 3.00°; 31R P4R; 13R two P4L |
+| PAPI all ends | yes | **ok** | 3.00°; 31R P4R; 13R one P4L aimed 22° left |
 | REIL | some ends | **partial** | KEWR 22R/11/29; JFK none on the current FAA chart |
 | Blue taxi edge / green CL | full network | **ok** | Schematic + OSM |
 | Stop bars | SMGCS | **ok** | Red at taxi starts |

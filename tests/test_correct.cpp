@@ -70,7 +70,7 @@ void test_correct() {
     }
     CHECK(saw_asphalt);
 
-    // Tight box around 04L/22R: markings, yellow displaced arrows, blend-out.
+    // Tight box around 04L/22R: markings, white displaced arrows, blend-out.
     s376::GeoBox tight;
     tight.west = -73.792;
     tight.south = 40.618;
@@ -109,14 +109,12 @@ void test_correct() {
     }
     const int hn = s376::apply_correction_overlay(hi, tight, jfk);
     CHECK(hn >= 4);
-    bool saw_white = false, saw_yellow = false, saw_asphalt2 = false;
+    bool saw_white = false, saw_asphalt2 = false;
     int leftover_white = 0;
     for (std::size_t i = 0; i + 2 < hi.rgb.size(); i += 3) {
         const int r = hi.rgb[i], g = hi.rgb[i + 1], b = hi.rgb[i + 2];
         if (r >= 200 && g >= 200 && b >= 200)
             saw_white = true;
-        if (r > 180 && g > 140 && b < 80)
-            saw_yellow = true;
         if (r < 80 && g < 80 && b < 80)
             saw_asphalt2 = true;
     }
@@ -139,7 +137,7 @@ void test_correct() {
         CHECK(hi.rgb[static_cast<std::size_t>(di)] < 160);
         CHECK(hi.rgb[static_cast<std::size_t>(di + 1)] < 160);
     }
-    CHECK(saw_asphalt2 && saw_white && saw_yellow);
+    CHECK(saw_asphalt2 && saw_white);
     CHECK(leftover_white <= 2);
 
     const auto tmp = (std::filesystem::temp_directory_path() / "s376-correct-rpt").string();

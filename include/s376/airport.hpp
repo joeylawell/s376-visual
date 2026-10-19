@@ -21,6 +21,29 @@ constexpr int kSwTaxiEdge = 41;
 constexpr int kSwStopBar = 56;
 constexpr int kSwTaxiCenterline = 60;
 
+// AC 150/5340-1M runway markings (precision / ≥8000 ft LDA).
+constexpr double kAimingPointStartFt = 1020.0;
+constexpr double kAimingPointInnerFt = 72.0;
+constexpr double kAimingPointLenFt = 150.0;
+constexpr double kAimingPointWidthFt = 30.0;
+constexpr double kCenterlineWidthIn = 36.0;
+constexpr double kDisplacedThresholdBarFt = 10.0;
+constexpr int kTdzBarCounts[5] = {3, 2, 2, 1, 1};
+constexpr double kTdzStationFt[5] = {500.0, 1500.0, 2000.0, 2500.0, 3000.0};
+
+inline int threshold_stripe_count(double width_m) {
+    const double wft = width_m * geo::kMToFt;
+    if (wft >= 190.0)
+        return 16; // 200 ft runway
+    if (wft >= 140.0)
+        return 12; // 150 ft
+    if (wft >= 90.0)
+        return 8;
+    if (wft >= 70.0)
+        return 6;
+    return 4;
+}
+
 enum class LightKind {
     Edge,
     Centerline,

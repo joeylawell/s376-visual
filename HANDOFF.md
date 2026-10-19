@@ -257,9 +257,14 @@ geometry and lights are unchanged. Hangar Mint PC is offline — real
 | MSAA 4x (window) | `render.msaa` | 1.80 |
 | One-cascade sun CSM | `render.shadows` | 1.80 (off on gtx980ti) |
 
-Total **12.20 ms** shadows-off / **14.00 ms** shadows-on (under 16.67).
+Total **12.20 ms** shadows-on (`quality_gpu_budget_total_ms(true)`; under 16.67).
+The `--bench` pass table labels per-pass `scaled_ms` as **estimate** (budget
+share prorated to the `GL_TIME_ELAPSED` total). The total is the timer query.
 `--tod HOURS` and `--rwy-cond N` pose the host env for shots.
 See `docs/QUALITY.md`.
+
+QA re-check frames (04R / 13L at 6, 3, 1 nm, day and night) live in
+`docs/frames/before_*.png` and `docs/frames/after_*.png`.
 
 llvmpipe frames (`/tmp/kjfk-tiny`, hangar 980 Ti not on this box):
 
@@ -740,7 +745,7 @@ CI accuracy suite; datum/geoid/UTM; Raster-difference list.
   `data/faa/{kjfk,kewr}.toml`). Vincenty heading+length. 13L is 200 ft.
   Displaced: 22R **3424**, 13R 2044, 31L 3264, 13L 907, 31R 1027, 4L 460.
   ALS: 04R/22L/13L ALSF-2+SFL, 31R MALSR, 13R RLLS, 04L/22R/31L NONE.
-  PAPI 3.00° all eight JFK ends (13R two P4L; 31R P4R). EMAS DER 4R
+  PAPI 3.00° all eight JFK ends (13R one P4L aimed 22° left; 31R P4R). EMAS DER 4R
   393×226 and DER 22L 405×226. KEWR NFDC displaced 2540.6 / 1440.9
   (owner 2543/1423 documented).
 - **Accuracy suite** (`tests/test_accuracy.cpp`): end 3 m, heading

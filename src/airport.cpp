@@ -145,6 +145,7 @@ void paint_ident(AirportMesh& mesh, double lat, double lon, double hdg, double e
 void add_faa_markings(AirportMesh& mesh, const Runway& rw) {
     const double elev = std::max(rw.le_elev_m, rw.he_elev_m) + 0.48;
     const double half = rw.width_m * 0.5;
+    const double cl_h = 0.5 * kCenterlineWidthIn * 0.0254; // 36 in
     // Edge + centerline once from the LE end.
     mark_rect(mesh, rw.le_lat, rw.le_lon, rw.heading_deg, elev, 0, rw.length_m, half - 1.1,
               half - 0.15, 0.95f, 0.95f, 0.93f);
@@ -152,46 +153,73 @@ void add_faa_markings(AirportMesh& mesh, const Runway& rw) {
               -(half - 1.1), 0.95f, 0.95f, 0.93f);
     for (double d = 12; d < rw.length_m - 20; d += 60.0)
         mark_rect(mesh, rw.le_lat, rw.le_lon, rw.heading_deg, elev, d,
-                  std::min(d + 36.0, rw.length_m - 8), -0.22, 0.22, 0.96f, 0.96f, 0.94f);
+                  std::min(d + 36.0, rw.length_m - 8), -cl_h, cl_h, 0.96f, 0.96f, 0.94f);
 
     auto one_end = [&](double lat, double lon, double hdg, const std::string& ident,
                        double disp_ft) {
         const double disp_m = disp_ft * geo::kFtToM;
         if (disp_m > 8.0) {
-            // Yellow chevrons in the displaced area (official THR, not old paint).
-            for (double d = 12.0; d < disp_m - 8.0; d += 24.0) {
-                mark_rect(mesh, lat, lon, hdg, elev, d, d + 10.0, 4.0, 14.0, 0.92f, 0.78f, 0.12f);
-                mark_rect(mesh, lat, lon, hdg, elev, d, d + 10.0, -14.0, -4.0, 0.92f, 0.78f, 0.12f);
+            // AC 150/5340-1M 2.9: white arrows in the displaced area, not
+            // yellow blast-pad chevrons (those are §2.12 unusable pavement).
+            const double step = 100.0 * geo::kFtToM;
+            for (double d = 20.0 * geo::kFtToM; d < disp_m - 25.0 * geo::kFtToM; d += step) {
+                mark_rect(mesh, lat, lon, hdg, elev, d, d + 18.0 * geo::kFtToM, -cl_h, cl_h, 0.97f,
+                          0.97f, 0.95f);
+                mark_rect(mesh, lat, lon, hdg, elev, d + 14.0 * geo::kFtToM, d + 28.0 * geo::kFtToM,
+                          2.0, 8.0, 0.97f, 0.97f, 0.95f);
+                mark_rect(mesh, lat, lon, hdg, elev, d + 14.0 * geo::kFtToM, d + 28.0 * geo::kFtToM,
+                          -8.0, -2.0, 0.97f, 0.97f, 0.95f);
             }
             offset_m(lat, lon, hdg, disp_m, lat, lon);
+            // AC 150/5340-1M 2.10: 10 ft white threshold bar at the DTHR.
+            const double bar = kDisplacedThresholdBarFt * geo::kFtToM;
+            mark_rect(mesh, lat, lon, hdg, elev, 0.0, bar, -(half - 0.3), half - 0.3, 0.97f, 0.97f,
+                      0.95f);
         }
-        // Threshold bars at the landing THR: 8 (150 ft) or 12 (200 ft).
-        const int nb = rw.width_m >= 55.0 ? 12 : 8;
-        const double bar_w = 1.8;
+        // Threshold stripes: 16 on a 200 ft runway, 12 on 150 ft (Table 2-1).
+        const int nb = threshold_stripe_count(rw.width_m);
+        const double bar_w = 5.75 * geo::kFtToM;
+        const double stripe0 = (disp_m > 8.0 ? kDisplacedThresholdBarFt * geo::kFtToM : 0.0) + 1.0;
+        const double stripe1 = stripe0 + 150.0 * geo::kFtToM;
         const double span = half - 2.0;
         for (int i = 0; i < nb; ++i) {
             const double t = (i + 0.5) / nb;
             const double x = -span + t * 2.0 * span;
             if (std::fabs(x) < 3.0)
                 continue; // keep the centerline gap
-            mark_rect(mesh, lat, lon, hdg, elev, 3.0, 48.0, x - bar_w * 0.5, x + bar_w * 0.5, 0.97f,
-                      0.97f, 0.95f);
+            mark_rect(mesh, lat, lon, hdg, elev, stripe0, stripe1, x - bar_w * 0.5, x + bar_w * 0.5,
+                      0.97f, 0.97f, 0.95f);
         }
         // Designators just past the bars (photo: big "4R").
-        paint_ident(mesh, lat, lon, hdg, elev, 58.0, ident);
-        // Aiming points ~400 m (or 300 m if short).
-        const double aim = rw.length_m >= 2400.0 ? 400.0 : 300.0;
-        if (rw.length_m > aim + 80.0) {
-            mark_rect(mesh, lat, lon, hdg, elev, aim, aim + 45.0, 6.0, 15.0, 0.96f, 0.96f, 0.94f);
-            mark_rect(mesh, lat, lon, hdg, elev, aim, aim + 45.0, -15.0, -6.0, 0.96f, 0.96f, 0.94f);
+        paint_ident(mesh, lat, lon, hdg, elev, stripe1 + 10.0, ident);
+        // AC 150/5340-1M: aiming point starts 1020 ft, 150×30 ft, 72 ft inner.
+        const double aim0 = kAimingPointStartFt * geo::kFtToM;
+        const double aim1 = aim0 + kAimingPointLenFt * geo::kFtToM;
+        const double aim_in = 0.5 * kAimingPointInnerFt * geo::kFtToM;
+        const double aim_out = aim_in + kAimingPointWidthFt * geo::kFtToM;
+        if (rw.length_m > aim1 + 80.0) {
+            mark_rect(mesh, lat, lon, hdg, elev, aim0, aim1, aim_in, aim_out, 0.96f, 0.96f, 0.94f);
+            mark_rect(mesh, lat, lon, hdg, elev, aim0, aim1, -aim_out, -aim_in, 0.96f, 0.96f, 0.94f);
         }
-        // TDZ pairs every 150 m for the first 900 m on instrument runways.
-        for (int k = 1; k <= 5; ++k) {
-            const double d = 150.0 * k;
-            if (d + 20.0 >= rw.length_m * 0.45)
+        // TDZ 3-2-2-1-1 at 500/1500/2000/2500/3000 ft (aiming point occupies 1000).
+        const double bar_len = 75.0 * geo::kFtToM;
+        const double tdz_w = 6.0 * geo::kFtToM;
+        const double tdz_gap = 5.0 * geo::kFtToM;
+        const double tdz_inner = 36.0 * geo::kFtToM;
+        for (int s = 0; s < 5; ++s) {
+            const double d = kTdzStationFt[s] * geo::kFtToM;
+            if (d + bar_len >= rw.length_m * 0.45)
                 break;
-            mark_rect(mesh, lat, lon, hdg, elev, d, d + 22.0, 8.0, 14.0, 0.95f, 0.95f, 0.93f);
-            mark_rect(mesh, lat, lon, hdg, elev, d, d + 22.0, -14.0, -8.0, 0.95f, 0.95f, 0.93f);
+            const int nbar = kTdzBarCounts[s];
+            for (int side = -1; side <= 1; side += 2) {
+                for (int b = 0; b < nbar; ++b) {
+                    const double inner = tdz_inner + b * (tdz_w + tdz_gap);
+                    const double x0 = side > 0 ? inner : -(inner + tdz_w);
+                    const double x1 = side > 0 ? inner + tdz_w : -inner;
+                    mark_rect(mesh, lat, lon, hdg, elev, d, d + bar_len, x0, x1, 0.95f, 0.95f,
+                              0.93f);
+                }
+            }
         }
     };
     one_end(rw.le_lat, rw.le_lon, rw.heading_deg, rw.ident_le, rw.le_displaced_ft);
@@ -271,6 +299,17 @@ void set_bidir(Airport& a, float r, float g, float b, float r2, float g2, float 
     L.color_hdg_deg = hdg;
 }
 
+void set_unidir_last(Airport& a, int n, float hdg) {
+    const int N = static_cast<int>(a.lights.size());
+    for (int i = 0; i < n && i < N; ++i) {
+        auto& L = a.lights[static_cast<std::size_t>(N - 1 - i)];
+        L.r2 = 0.f;
+        L.g2 = 0.f;
+        L.b2 = 0.f;
+        L.color_hdg_deg = hdg;
+    }
+}
+
 void hirL_pair(double rem_ahead_m, double caution_m, float& r, float& g, float& b) {
     if (rem_ahead_m <= caution_m) {
         r = 1.f;
@@ -314,11 +353,25 @@ void lights_for_runway(Airport& a, const Runway& rw, int k) {
     const double step_cl = 15.0;   // CAT II/III centerline
     const double caution_m = std::min(2000.0 * geo::kFtToM, rw.length_m * 0.5);
     const int n_edge = std::max(2, static_cast<int>(std::floor(rw.length_m / step_edge)));
+    const double le_disp_m = rw.le_displaced_ft * geo::kFtToM;
+    const double he_disp_m = rw.he_displaced_ft * geo::kFtToM;
     for (int i = 0; i <= n_edge; ++i) {
         const double d = rw.length_m * i / n_edge;
         float r_he, g_he, b_he, r_le, g_le, b_le;
         hirL_pair(rw.length_m - d, caution_m, r_he, g_he, b_he); // looking toward HE
         hirL_pair(d, caution_m, r_le, g_le, b_le);               // looking toward LE
+        // AC 150/5340-30J 2.3.2.1.2: displaced-area edge lights are red
+        // toward the approach and keep the runway colour the other way.
+        if (le_disp_m > 8.0 && d < le_disp_m - 1.0) {
+            r_he = 1.f;
+            g_he = 0.12f;
+            b_he = 0.10f;
+        }
+        if (he_disp_m > 8.0 && d > rw.length_m - he_disp_m + 1.0) {
+            r_le = 1.f;
+            g_le = 0.12f;
+            b_le = 0.10f;
+        }
         double clat, clon;
         along_surveyed(rw, d, clat, clon);
         const double elev = rw.le_elev_m + (rw.he_elev_m - rw.le_elev_m) * (d / rw.length_m);
@@ -361,17 +414,23 @@ void lights_for_runway(Airport& a, const Runway& rw, int k) {
         double lat, lon, hdg, elev, disp_m;
         landing(le, lat, lon, hdg, elev, disp_m);
         const std::string sys = le ? rw.approach_le : rw.approach_he;
+        int n_green = 8;
         if (sys == "ALSF-2") {
             // JO 6850.2C Fig 2-1: green lamps on 5 ft centres, 45 ft past each edge.
             const double half = rw.width_m * 0.5 + 45.0 * geo::kFtToM;
-            const int n = std::max(9, static_cast<int>(std::lround((2.0 * half) / (5.0 * geo::kFtToM))) + 1);
-            bar(a, lat, lon, hdg, elev, half, n, 0.15f, 1.f, 0.25f, sw, LightKind::End, k);
+            n_green = std::max(9, static_cast<int>(std::lround((2.0 * half) / (5.0 * geo::kFtToM))) + 1);
+            bar(a, lat, lon, hdg, elev, half, n_green, 0.15f, 1.f, 0.25f, sw, LightKind::End, k);
         } else {
-            bar(a, lat, lon, hdg, elev, rw.width_m * 0.5, 8, 0.15f, 1.f, 0.25f, sw, LightKind::End, k);
+            bar(a, lat, lon, hdg, elev, rw.width_m * 0.5, n_green, 0.15f, 1.f, 0.25f, sw,
+                LightKind::End, k);
         }
-        // Red end lights facing the opposite direction (bidirectional pair).
+        // Green toward the approach (unidirectional). r2=0 = off from behind.
+        set_unidir_last(a, n_green, static_cast<float>(hdg));
+        // Red end lights face the runway, so a short-final does not see
+        // red mixed into the green bar or the opposite-end green bar.
         bar(a, le ? rw.le_lat : rw.he_lat, le ? rw.le_lon : rw.he_lon, hdg, elev, rw.width_m * 0.5, 6,
             1.f, 0.12f, 0.1f, sw, LightKind::End, k);
+        set_unidir_last(a, 6, static_cast<float>(wrap360(hdg + 180.0)));
     };
     end_bar(true, sw_tdz);
     end_bar(false, sw_tdz);
@@ -417,10 +476,10 @@ void lights_for_runway(Airport& a, const Runway& rw, int k) {
         const float rot0 = static_cast<float>(le ? rw.papi_rotate_le : rw.papi_rotate_he);
         const float ul = static_cast<float>(le ? rw.papi_usable_left_le : rw.papi_usable_left_he);
         const float ur = static_cast<float>(le ? rw.papi_usable_right_le : rw.papi_usable_right_he);
-        for (int s = 0; s < std::max(1, nsys); ++s) {
+        const int n_place = std::max(1, nsys);
+        for (int s = 0; s < n_place; ++s) {
             double plat, plon;
             offset_m(lat, lon, hdg, along0 + s * 30.0, plat, plon);
-            // 13R first P4L is the 22° left system; the second is the on-CL set.
             const float rot = (s == 0) ? rot0 : 0.f;
             for (int i = 0; i < 4; ++i) {
                 double qlat, qlon;
@@ -429,8 +488,11 @@ void lights_for_runway(Airport& a, const Runway& rw, int k) {
                 // On-path default: inner red, outer white (overridden by the eye).
                 const float cr = i < 2 ? 1.f : 0.15f;
                 const float cg = i < 2 ? 0.12f : 1.f;
-                push_light(a, qlat, qlon, std::max(light_alt_m(qlat, qlon, elev), elev) + 0.9,
-                           cr, cg, 0.15f, sw_vasi, LightKind::Vasi, k, -1, i, static_cast<float>(gs));
+                // Optical center 2 ft AGL — not light_alt_m+0.9 (5.7 ft),
+                // which pushed TCH 5.7 ft above the published figure.
+                const double papi_alt = elev + lights::kPapiOpticalHtFt * geo::kFtToM;
+                push_light(a, qlat, qlon, papi_alt, cr, cg, 0.15f, sw_vasi, LightKind::Vasi, k, -1,
+                           i, static_cast<float>(gs));
                 auto& L = a.lights.back();
                 L.papi_rotate_deg = rot;
                 L.papi_usable_left_deg = ul;
@@ -458,7 +520,7 @@ void lights_for_runway(Airport& a, const Runway& rw, int k) {
     reil(true, sw_strobe_a);
     reil(false, sw_strobe_b);
 
-    auto als = [&](bool le, int sw) {
+    auto als = [&](bool le, int sw, int sw_strobe) {
         const std::string sys = le ? rw.approach_le : rw.approach_he;
         if (sys.empty() || sys == "NONE")
             return;
@@ -473,17 +535,14 @@ void lights_for_runway(Airport& a, const Runway& rw, int k) {
             bar(a, plat, plon, hdg, light_alt_m(plat, plon, elev), cl_half, 5, 1.f, 1.f, 0.92f, sw,
                 kind, k);
             if (seq >= 0) {
-                push_light(a, plat, plon, light_alt_m(plat, plon, elev) + 0.3, 1.f, 1.f, 1.f, sw,
-                           LightKind::Flasher, k, seq);
+                // SFL / RAIL ride the strobe circuit, not the steady ALS switch.
+                push_light(a, plat, plon, light_alt_m(plat, plon, elev) + 0.3, 1.f, 1.f, 1.f,
+                           sw_strobe, LightKind::Flasher, k, seq);
             }
         };
-        auto rlls_published = [&]() {
-            // Chart Supplement: 5 SFL 1200–2000 ft (on CL) and a 5-SFL group
-            // about 1 NM out; approach gate 35° south of the centreline.
-            if (sys != "ALSF-2") {
-                for (int i = 0; i < 5; ++i)
-                    bar5(1200.0 + 200.0 * i, LightKind::Flasher, i);
-            }
+        auto rlls_13l = [&]() {
+            // Chart Supplement 13L only: 5 SFL 1200–2000 ft already sit on
+            // the ALSF-2 CL; plus a 5-SFL group ~1 NM out, gate 35° south.
             auto d180 = [](double h) {
                 double x = std::fabs(h - 180.0);
                 return x > 180.0 ? 360.0 - x : x;
@@ -494,8 +553,8 @@ void lights_for_runway(Airport& a, const Runway& rw, int k) {
             for (int i = 0; i < 5; ++i) {
                 double plat, plon;
                 offset_m(lat, lon, gate, (6076.0 - 200.0 * i) * geo::kFtToM, plat, plon);
-                push_light(a, plat, plon, light_alt_m(plat, plon, elev) + 0.3, 1.f, 1.f, 1.f, sw,
-                           LightKind::Flasher, k, i);
+                push_light(a, plat, plon, light_alt_m(plat, plon, elev) + 0.3, 1.f, 1.f, 1.f,
+                           sw_strobe, LightKind::Flasher, k, i);
             }
         };
         if (sys == "ALSF-2") {
@@ -540,7 +599,7 @@ void lights_for_runway(Airport& a, const Runway& rw, int k) {
                 }
             }
             if (le ? rw.rlls_lead_in_le : rw.rlls_lead_in_he)
-                rlls_published();
+                rlls_13l();
         } else if (sys == "ALSF-1") {
             for (int i = 1; i <= 24; ++i)
                 bar5(100.0 * i, LightKind::Approach, (i >= 10) ? (24 - i) : -1);
@@ -562,13 +621,22 @@ void lights_for_runway(Airport& a, const Runway& rw, int k) {
             }
             double xlat, xlon;
             offset_m(lat, lon, back, 1000.0 * geo::kFtToM, xlat, xlon);
-            bar(a, xlat, xlon, hdg, light_alt_m(xlat, xlon, elev), 33.0 * geo::kFtToM, 27, 1.f, 1.f,
-                0.92f, sw, LightKind::Approach, k);
+            // JO 6850.2C Fig 2-3: 1000 ft bar = CL 5-lamp + two 5-lamp
+            // side bars, 66 ft overall — not 27 even lamps.
+            bar(a, xlat, xlon, hdg, light_alt_m(xlat, xlon, elev), mals_half, 5, 1.f, 1.f, 0.92f, sw,
+                LightKind::Approach, k);
+            for (int side = -1; side <= 1; side += 2) {
+                double blat, blon;
+                offset_m(xlat, xlon, hdg + 90.0 * side, 28.0 * geo::kFtToM, blat, blon);
+                bar(a, blat, blon, hdg, light_alt_m(blat, blon, elev), mals_half, 5, 1.f, 1.f, 0.92f,
+                    sw, LightKind::Approach, k);
+            }
             for (int i = 0; i < 5; ++i) {
                 double plat, plon;
                 offset_m(lat, lon, back, (1600.0 + 200.0 * i) * geo::kFtToM, plat, plon);
-                push_light(a, plat, plon, light_alt_m(plat, plon, elev) + 0.3, 1.f, 1.f, 1.f, sw,
-                           LightKind::Flasher, k, i);
+                // seq 0 = outermost so the RAIL runs toward the runway.
+                push_light(a, plat, plon, light_alt_m(plat, plon, elev) + 0.3, 1.f, 1.f, 1.f,
+                           sw_strobe, LightKind::Flasher, k, 4 - i);
             }
         } else if (sys == "MALSF") {
             for (int i = 1; i <= 7; ++i)
@@ -576,8 +644,8 @@ void lights_for_runway(Airport& a, const Runway& rw, int k) {
             for (int i = 0; i < 5; ++i) {
                 double plat, plon;
                 offset_m(lat, lon, back, (1400.0 + 200.0 * i) * geo::kFtToM, plat, plon);
-                push_light(a, plat, plon, light_alt_m(plat, plon, elev) + 0.3, 1.f, 1.f, 1.f, sw,
-                           LightKind::Flasher, k, i);
+                push_light(a, plat, plon, light_alt_m(plat, plon, elev) + 0.3, 1.f, 1.f, 1.f,
+                           sw_strobe, LightKind::Flasher, k, 4 - i);
             }
         } else if (sys == "MALS") {
             for (int i = 1; i <= 7; ++i)
@@ -595,13 +663,21 @@ void lights_for_runway(Airport& a, const Runway& rw, int k) {
             offset_m(lat, lon, back, 1000.0 * geo::kFtToM, xlat, xlon);
             bar(a, xlat, xlon, hdg, elev, 18.0, 11, 1.f, 1.f, 0.92f, sw, LightKind::Approach, k);
         } else if (sys == "RLLS") {
-            rlls_published();
+            // 13R published data is RLLS only — 5 CL flashers sequenced
+            // toward the threshold. Do not copy the 13L 35°/1 NM remark
+            // or invent 5-lamp steady bars.
+            for (int i = 0; i < 5; ++i) {
+                double plat, plon;
+                offset_m(lat, lon, back, (1200.0 + 200.0 * i) * geo::kFtToM, plat, plon);
+                push_light(a, plat, plon, light_alt_m(plat, plon, elev) + 0.3, 1.f, 1.f, 1.f,
+                           sw_strobe, LightKind::Flasher, k, 4 - i);
+            }
         } else {
             bar5(1400.0, LightKind::Approach);
         }
     };
-    als(true, sw_app_a);
-    als(false, sw_app_b);
+    als(true, sw_app_a, sw_strobe_a);
+    als(false, sw_app_b, sw_strobe_b);
 }
 
 void lights_for_taxi(Airport& a) {

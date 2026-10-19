@@ -118,10 +118,12 @@ const FaaAirportRef& faa_kjfk() {
     a.ends.back().vgsi_tch_ft = 54;
     a.ends.push_back(end("KJFK", "13R", geo::dms_to_deg(40, 38, 54.1008),
                          geo::dms_to_deg(73, 49, 0.173, true), 12.5, 120.7382, 14511, 200, 2044,
-                         "RLLS", "P4L+P4L", 3.00, false, false, false, 0, 0));
+                         "RLLS", "P4L", 3.00, false, false, false, 0, 0));
     a.ends.back().vgsi_tch_ft = 79;
     a.ends.back().rlls_lead_in = true;
-    a.ends.back().papi_rotate_deg = -22; // first P4L offset 22° left
+    a.ends.back().papi_rotate_deg = -22; // single P4L offset 22° left
+    a.ends.back().papi_usable_left_deg = 32; // 22° aim + 10° beam must fit
+
     a.ends.push_back(end("KJFK", "31L", geo::dms_to_deg(40, 37, 40.7799),
                          geo::dms_to_deg(73, 46, 18.4107, true), 12.6, 300.7674, 14511, 200, 3264,
                          "NONE", "P4L", 3.00, false, false, false, 0, 0));

@@ -392,7 +392,7 @@ vgsi = "P4L"
 vgsi_side = "left"
 vgsi_angle_deg = 3.00
 vgsi_tch_ft = 79
-vgsi_count = 2
+vgsi_count = 1
 reil = false  # none listed in the Chart Supplement
 centerline_lights = true
 tdz_lights = false
@@ -404,7 +404,7 @@ tora_ft = 14511
 toda_ft = 14511
 asda_ft = 14511
 lda_ft = 12467
-remarks = ["First P4L horizontal offset 22 deg left; second P4L with transitional TCH and 3 deg VGSI", "Right traffic", "Caution: Rwy 13R can be confused with Rwy 13L"]
+remarks = ["P4L horizontal offset 22 deg left of rwy centerline", "Right traffic", "Caution: Rwy 13R can be confused with Rwy 13L"]
 
 [[end]]
 id = "31L"

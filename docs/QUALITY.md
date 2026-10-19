@@ -71,7 +71,8 @@ Joey's Mint PC is back.
 Both fit under 16.67 ms. Official runway/taxi coordinates are not changed.
 
 `--bench` flies KJFK:04R (or `--approach`) and prints per-sample GPU ms
-from `GL_TIME_ELAPSED` plus a budgeted pass table, then one pasteable
+from `GL_TIME_ELAPSED` plus a budgeted pass table (per-pass `scaled_ms` is an
+**estimate** prorated from that timer-query total), then one pasteable
 line:
 
 `SUMMARY  s376 --bench quality=gtx980ti budget=12.20ms max=…ms@…nm avg=…ms dropped=none result=UNDER 60Hz=YES`
