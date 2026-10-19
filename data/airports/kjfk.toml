@@ -1,0 +1,129 @@
+# KJFK — FAA both physical ends (not LE + heading + length).
+# Source: FAA AIP AD 2 KJFK + NFDC airportDisplay, cross-checked OurAirports.
+# Effective NASR / AIP cycle 2026-10-01, retrieved 2026-10-18.
+# Lighting: AIP AD 2.14. 04L/22R/31L NONE; 04R/22L/13L ALSF-2; 31R MALSR; 13R RLLS.
+# 13L/31R is 200 ft wide. 22R displaced threshold is 3424 ft.
+# Taxi / apron connectors in the binary are schematic offsets; replace with
+# `s376-cache osm KJFK` (Overpass aeroway=*, ODbL).
+# Packet-112 switch numbers are ours, not RSI's.
+
+icao = "KJFK"
+name = "John F Kennedy International"
+arp_lat = 40.6399280556
+arp_lon = -73.7786922222
+elev_ft = 13
+attribution = "FAA AIP AD 2 KJFK / NFDC effective 2026-10-01, retrieved 2026-10-18; OurAirports cross-check"
+
+[source]
+name = "FAA AIP AD 2 KJFK (faa.gov) + NFDC, cross-checked OurAirports"
+effective = "2026-10-01"
+retrieved = "2026-10-18"
+
+[lights]
+edge_switch = 3
+centerline_switch = 4
+approach_switch = 1
+threshold_switch = 6
+
+[[runways]]
+ident_le = "04L"
+ident_he = "22R"
+le_lat = 40.6220209444
+le_lon = -73.7855841389
+he_lat = 40.6505093889
+he_lon = -73.7633221111
+le_elev_ft = 11.9
+he_elev_ft = 12.5
+length_ft = 12079
+width_ft = 200
+le_displaced_ft = 460
+he_displaced_ft = 3424
+approach_le = "NONE"
+approach_he = "NONE"
+papi_le = "P4L"
+papi_he = "P4L"
+papi_deg_le = 3.00
+papi_deg_he = 3.00
+vgsi_tch_ft_le = 75
+vgsi_tch_ft_he = 77
+tdz_le = true
+
+[[runways]]
+ident_le = "04R"
+ident_he = "22L"
+le_lat = 40.6254282778
+le_lon = -73.7703455833
+he_lat = 40.6452369722
+he_lon = -73.7548618611
+le_elev_ft = 11.9
+he_elev_ft = 11.9
+length_ft = 8400
+width_ft = 200
+le_displaced_ft = 0
+he_displaced_ft = 0
+approach_le = "ALSF-2"
+approach_he = "ALSF-2"
+papi_le = "P4L"
+papi_he = "P4L"
+papi_deg_le = 3.00
+papi_deg_he = 3.00
+vgsi_tch_ft_le = 69
+vgsi_tch_ft_he = 66
+ils_tch_ft_le = 53
+tdz_le = true
+tdz_he = true
+emas_le = true
+emas_he = true
+emas_le_len_ft = 393
+emas_he_len_ft = 405
+emas_wid_ft = 226
+
+[[runways]]
+ident_le = "13L"
+ident_he = "31R"
+le_lat = 40.6577644444
+le_lon = -73.7902390556
+he_lat = 40.6437245833
+he_lon = -73.7592727222
+le_elev_ft = 12.9
+he_elev_ft = 12.6
+length_ft = 10000
+width_ft = 200
+le_displaced_ft = 907
+he_displaced_ft = 1027
+approach_le = "ALSF-2"
+approach_he = "MALSR"
+papi_le = "P4L"
+papi_he = "P4R"
+papi_deg_le = 3.00
+papi_deg_he = 3.00
+vgsi_tch_ft_le = 74
+vgsi_tch_ft_he = 54
+ils_tch_ft_le = 58
+rlls_lead_in_le = true
+tdz_le = true
+tdz_he = true
+
+[[runways]]
+ident_le = "13R"
+ident_he = "31L"
+le_lat = 40.6483613333
+le_lon = -73.8167147222
+he_lat = 40.6279946389
+he_lon = -73.7717807500
+le_elev_ft = 12.5
+he_elev_ft = 12.6
+length_ft = 14511
+width_ft = 200
+le_displaced_ft = 2044
+he_displaced_ft = 3264
+approach_le = "RLLS"
+approach_he = "NONE"
+papi_le = "P4L+P4L"
+papi_he = "P4L"
+papi_deg_le = 3.00
+papi_deg_he = 3.00
+vgsi_tch_ft_le = 79
+vgsi_tch_ft_he = 74
+rlls_lead_in_le = true
+papi_count_le = 2

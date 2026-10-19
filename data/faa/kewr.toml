@@ -1,0 +1,101 @@
+# Authoritative FAA transcription used by src/faa.cpp (faa_kewr).
+# Displaced 04L/22R are NFDC 2540.6 / 1440.9 ft (owner 2543 / 1423 documented
+# in docs/ACCURACY.md). Cycle dates travel with every value.
+
+icao = "KEWR"
+name = "Newark Liberty International"
+arp_lat_dms = "N40-41.55"
+arp_lon_dms = "W74-10.12"
+elev_ft = 18
+source = "FAA NFDC airportDisplay KEWR + AIP AD 2 + chart supplement, cross-checked AirNav/OurAirports"
+effective = "2026-10-01"
+retrieved = "2026-10-18"
+
+[[ends]]
+ident = "04L"
+lat_dms = "40-40-31.3731N"
+lon_dms = "74-10-46.0156W"
+elev_ft = 9.8
+true_brg_deg = 26
+length_ft = 11000
+width_ft = 150
+displaced_ft = 2540.6
+als = "MALSR"
+papi = "P4L"
+papi_deg = 3.10
+tdz = true
+
+[[ends]]
+ident = "22R"
+lat_dms = "40-42-09.2158N"
+lon_dms = "74-09-43.8183W"
+elev_ft = 8.5
+true_brg_deg = 206
+length_ft = 11000
+width_ft = 150
+displaced_ft = 1440.9
+als = "MALSR"
+papi = "P4L"
+papi_deg = 3.10
+reil = true
+tdz = true
+
+[[ends]]
+ident = "04R"
+lat_dms = "40-40-39.3027N"
+lon_dms = "74-10-27.2825W"
+elev_ft = 11.0
+true_brg_deg = 26
+length_ft = 9999
+width_ft = 150
+displaced_ft = 1190.2
+als = "ALSF-2"
+papi = "P4L"
+papi_deg = 2.95
+tdz = true
+
+[[ends]]
+ident = "22L"
+lat_dms = "40-42-08.2401N"
+lon_dms = "74-09-30.7356W"
+elev_ft = 9.0
+true_brg_deg = 206
+length_ft = 9999
+width_ft = 150
+displaced_ft = 1794.1
+als = "ALSF-2"
+papi = "P4L"
+papi_deg = 3.00
+tdz = true
+
+[[ends]]
+ident = "11"
+lat_dms = "40-42-10.0957N"
+lon_dms = "74-10-50.5467W"
+elev_ft = 17.5
+true_brg_deg = 95
+length_ft = 6725
+width_ft = 150
+displaced_ft = 0
+als = "NONE"
+papi = "P4R"
+papi_deg = 3.00
+reil = true
+tdz = true
+emas = true
+
+[[ends]]
+ident = "29"
+lat_dms = "40-42-04.3179N"
+lon_dms = "74-09-23.5566W"
+elev_ft = 9.9
+true_brg_deg = 275
+length_ft = 6725
+width_ft = 150
+displaced_ft = 224
+als = "NONE"
+papi = "P4R"
+papi_deg = 3.00
+reil = true
+tdz = true
+emas = true

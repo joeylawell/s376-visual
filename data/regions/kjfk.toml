@@ -1,0 +1,21 @@
+# Fetch / import plan. No imagery in git. --plan only.
+name = "KJFK"
+icao = "KJFK"
+south = 39.974459
+north = 41.305397
+west = -74.655673
+east = -72.901711
+near_m = 0.15
+near_dem_m = 1.0
+mid_m = 0.6
+far_m = 2.4
+near_km = 8.0
+mid_km = 40.0
+approach_nm = 12.0
+radius_km = 74.080
+imagery = "nys"
+dem = "3dep"
+policy = "public"
+local_import = false
+source = "NYS ITS 2024 orthos / NYC 2024. Live --imagery nys. After hangar 1 m validates, queue --near-m 0.3."
+airports = ["KJFK", "KEWR"]

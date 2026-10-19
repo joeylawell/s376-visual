@@ -1,0 +1,98 @@
+# Original Raster layout: three channel PCs plus one Host IO PC.
+# Host IO does the operator display and host I/O only — it does not
+# draw a collimated channel. Each channel is 50 × 32.5 deg at 60 Hz.
+# Heading offset is added to true heading (clockwise from north).
+# Left is −50° of front, Right +50°, pitch/roll 0. Raster's Left
+# flip_vertical is a projector framebuffer mirror only — never a
+# camera orientation, never the preview strip.
+#
+# Map this process to a channel with --channel front|left|right|host_io.
+# Do not put simulator-LAN addresses in bind or reply_to. The original
+# channel PCs sat at .102 (Front) / .101 (Left) / .103 (Right) on that
+# LAN — record those in a private local.toml if you need them. Tests
+# and this tree never contact that network. Reply port is 2301; leave
+# reply_to empty to answer the sender.
+
+[host]
+bind = "0.0.0.0:2300"
+reply_port = 2301
+reply_to = ""
+word_order = "auto"
+float_format = "auto"
+hat_responder = true
+reply_master = "host_io"
+allow_sim_lan = false
+allow_lan = false
+
+[render]
+engine = "auto"
+earth_file = "data/earth/s376.earth"
+frame_rate = 60
+window_title = "s376-visual"
+vsync = true
+msaa = 4
+aniso = 16
+quality = "gtx980ti"
+sync_to_host = true
+
+[control]
+bind = "127.0.0.1:2376"
+enabled = true
+
+[log]
+verbose = false
+debug = false
+dir = "logs"
+
+[[channels]]
+name = "front"
+role = "channel"
+raster_ch = 0
+heading_offset_deg = 0.0
+hfov_deg = 50.0
+vfov_deg = 32.5
+flip_vertical = false
+monitor = 0
+resolution = "1920x1200"
+enabled = true
+
+[[channels]]
+name = "left"
+role = "channel"
+raster_ch = 1
+heading_offset_deg = -50.0
+pitch_offset_deg = 0.0
+roll_offset_deg = 0.0
+hfov_deg = 50.0
+vfov_deg = 32.5
+flip_vertical = true
+monitor = 1
+resolution = "1920x1200"
+enabled = true
+
+[[channels]]
+name = "right"
+role = "channel"
+raster_ch = 2
+heading_offset_deg = 50.0
+pitch_offset_deg = 0.0
+roll_offset_deg = 0.0
+hfov_deg = 50.0
+vfov_deg = 32.5
+flip_vertical = false
+monitor = 2
+resolution = "1920x1200"
+enabled = true
+
+[[channels]]
+name = "host_io"
+role = "host_io"
+raster_ch = -1
+heading_offset_deg = 0.0
+pitch_offset_deg = -18.0
+hfov_deg = 60.0
+vfov_deg = 40.0
+flip_vertical = false
+monitor = 3
+resolution = "1920x1080"
+enabled = true

@@ -1,0 +1,21 @@
+# Fetch / import plan. No imagery in git. --plan only.
+name = "LEBL"
+icao = "LEBL"
+south = 40.631631
+north = 41.962569
+west = 1.192741
+east = 2.964259
+near_m = 0.25
+near_dem_m = 30.0
+mid_m = 1.0
+far_m = 4.0
+near_km = 8.0
+mid_km = 40.0
+approach_nm = 12.0
+radius_km = 74.080
+imagery = "icgc"
+dem = "glo30"
+policy = "public"
+local_import = false
+source = "ICGC ortofoto 2024 25 cm / IGN PNOA. Download then import-raster."
+airports = ["LEBL"]

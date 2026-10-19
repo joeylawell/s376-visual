@@ -1,0 +1,36 @@
+# Packet-112 switch numbers used by this IG (ours, not a vendor list).
+# Runway k = 1..7 starts at the base, then offsets 1..8.
+#
+#   k     base
+#   1        0
+#   2        8
+#   3       16
+#   4       24
+#   5       32
+#   6       84
+#   7       92
+#
+# Offsets on each runway:
+#   1  approach A
+#   2  strobe / REIL A
+#   3  runway edge
+#   4  runway centreline
+#   5  VASI / PAPI
+#   6  touchdown zone
+#   7  approach B
+#   8  strobe / REIL B
+#
+# Taxi (airport-wide):
+#   41  taxi edge
+#   56  stop bars
+#   60  taxi centreline
+#
+# Five intensity steps (1..5; 0 is off):
+#   approach / TDZ     0.27  0.35  0.50  0.74  1.00
+#   strobe / REIL      0.70  0.75  0.80  0.85  1.00
+#   edge (and similar) 0.35  0.55  0.68  0.92  1.00
+
+runway_bases = [0, 8, 16, 24, 32, 84, 92]
+taxi_edge = 41
+stop_bars = 56
+taxi_centerline = 60

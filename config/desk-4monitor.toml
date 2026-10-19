@@ -1,0 +1,101 @@
+# 4-monitor hangar DESK (one PC, Ryzen 7 8700F + RTX 5060 Ti) — not the
+# live sim. The sim is four projector PCs; see config/s376-visual.toml.
+# xrandr layout observed on the box:
+#   DP-4    +0       debug / IOS
+#   DP-3    +1920    left visual
+#   HDMI-0  +3840    front visual
+#   DP-0    +5760    right visual
+# One X screen (7680×1080). Pin windows with window_x.
+# Headings/FOV are Raster's 3 collimated channels (same as the sim).
+# The live sim runs those on four PCs (both middles = front); this file
+# is one box driving IOS + left/front/right. The IOS view is the same
+# eyepoint, pitched down.
+#
+# Never set allow_sim_lan here. Copy to config/local.toml for the IG PC.
+
+[host]
+bind = "0.0.0.0:2300"
+reply_port = 2301
+word_order = "auto"
+float_format = "auto"
+hat_responder = true
+reply_master = "front"    # one process opens every window
+allow_sim_lan = false
+allow_lan = false
+
+[render]
+engine = "auto"
+earth_file = "data/earth/ksea.earth"
+cache_dir = "cache/ksea"
+frame_rate = 60
+window_title = "s376-visual"
+vsync = true
+msaa = 4
+aniso = 16
+quality = "gtx980ti"
+sync_to_host = false      # one box, free-run 60 Hz
+
+[log]
+verbose = false
+debug = false
+dir = "logs"
+
+[[channels]]
+name = "ios"
+heading_offset_deg = 0.0
+pitch_offset_deg = -18.0
+roll_offset_deg = 0.0
+hfov_deg = 60.0
+vfov_deg = 36.0
+monitor = 0
+width = 1920
+height = 1080
+window_x = 0
+window_y = 0
+fullscreen = false
+enabled = true
+
+[[channels]]
+name = "left"
+heading_offset_deg = -50.0
+pitch_offset_deg = 0.0
+roll_offset_deg = 0.0
+hfov_deg = 50.0
+vfov_deg = 32.5
+flip_vertical = true
+monitor = 0
+resolution = "1920x1200"      # sim projector default; desk monitors are 1080
+window_x = 1920
+window_y = 0
+fullscreen = false
+enabled = true
+
+[[channels]]
+name = "front"
+heading_offset_deg = 0.0
+pitch_offset_deg = 0.0
+roll_offset_deg = 0.0
+hfov_deg = 50.0
+vfov_deg = 32.5
+flip_vertical = false
+monitor = 0
+resolution = "1920x1200"
+window_x = 3840
+window_y = 0
+fullscreen = false
+enabled = true
+
+[[channels]]
+name = "right"
+heading_offset_deg = 50.0
+pitch_offset_deg = 0.0
+roll_offset_deg = 0.0
+hfov_deg = 50.0
+vfov_deg = 32.5
+flip_vertical = false
+monitor = 0
+resolution = "1920x1200"
+window_x = 5760
+window_y = 0
+fullscreen = false
+enabled = true

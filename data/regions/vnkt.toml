@@ -1,0 +1,21 @@
+# Fetch / import plan. No imagery in git. --plan only.
+name = "VNKT"
+icao = "VNKT"
+south = 27.031131
+north = 28.362069
+west = 84.607515
+east = 86.110685
+near_m = 0
+near_dem_m = 30.0
+mid_m = 4.0
+far_m = 20.0
+near_km = 8.0
+mid_km = 40.0
+approach_nm = 12.0
+radius_km = 74.080
+imagery = "raster-local"
+dem = "glo30"
+policy = "raster-local"
+local_import = true
+source = "Sentinel-2 10 m is worse than Raster. Local-only import-raster. Do not fetch S2 as the near field."
+airports = ["VNKT"]

@@ -1,0 +1,21 @@
+# Fetch / import plan. No imagery in git. --plan only.
+name = "KIAD"
+icao = "KIAD"
+south = 38.282031
+north = 39.612969
+west = -78.315664
+east = -76.604336
+near_m = 0.3
+near_dem_m = 1.0
+mid_m = 1.2
+far_m = 4.8
+near_km = 8.0
+mid_km = 40.0
+approach_nm = 12.0
+radius_km = 74.080
+imagery = "loudoun"
+dem = "3dep"
+policy = "public"
+local_import = false
+source = "Loudoun COLOR_2025 30 cm. Download then import-raster."
+airports = ["KIAD"]

@@ -1,0 +1,21 @@
+# Fetch / import plan. No imagery in git. --plan only.
+name = "EDDF"
+icao = "EDDF"
+south = 49.372431
+north = 50.703369
+west = 7.526097
+east = 9.598303
+near_m = 0.2
+near_dem_m = 30.0
+mid_m = 0.8
+far_m = 3.2
+near_km = 8.0
+mid_km = 40.0
+approach_nm = 12.0
+radius_km = 74.080
+imagery = "hessen"
+dem = "glo30"
+policy = "public"
+local_import = false
+source = "Hessen DOP20 (DL-DE Zero). Download then import-raster."
+airports = ["EDDF"]

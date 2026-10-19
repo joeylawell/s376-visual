@@ -1,0 +1,25 @@
+# KJFK near-field 0.3 m plan. NYS/NYC 2024 15–30 cm.
+# Within ~3 km of each runway. Do NOT run this fetch here.
+# After the hangar 1 m pack validates:
+#   s376-cache fetch KJFK --plan --out cache/KJFK-near --imagery nys --dem 3dep \
+#     --near-m 0.3 --near-dem-m 1 --near-km 3 --approach-nm 3 --radius-km 8
+name = "KJFK-near"
+icao = "KJFK"
+south = 40.593411
+north = 40.676949
+west = -73.855515
+east = -73.714485
+near_m = 0.3
+near_dem_m = 1.0
+mid_m = 1.2
+far_m = 4.8
+near_km = 3.0
+mid_km = 8.0
+approach_nm = 3.0
+radius_km = 8.0
+imagery = "nys"
+dem = "3dep"
+policy = "public"
+local_import = false
+source = "NYS ITS 2024 / NYC_Orthos_2024 15–30 cm within ~3 km of each runway. Plan only."
+airports = ["KJFK"]

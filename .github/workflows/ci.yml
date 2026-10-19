@@ -1,0 +1,189 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake g++ libopenscenegraph-dev libgl-dev libglew-dev libgdal-dev xvfb shellcheck
+      - name: scripts syntax
+        run: |
+          bash -n scripts/setup-mint.sh
+          bash -n scripts/build-osgearth.sh
+          bash -n scripts/fetch-textures.sh
+          bash -n scripts/check-no-rsi.sh
+          bash -n scripts/pack-windows.sh
+          bash -n scripts/hangar-review.sh
+          bash -n scripts/hangar-queue.sh
+          ./scripts/check-no-rsi.sh
+          ./scripts/setup-mint.sh --dry-run --skip-apt --no-desktop | head
+          ./scripts/pack-windows.sh build /tmp/s376-win-layout
+          test -s /tmp/s376-win-layout/CHANNEL-PCS.txt
+          test -d /tmp/s376-win-layout/config
+          test -d /tmp/s376-win-layout/data
+          ./tests/test_hangar_scripts.sh
+      - name: configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=g++
+      - name: build
+        run: cmake --build build -j $(nproc)
+      - name: unit tests
+        run: |
+          unset S376_ALLOW_SIM_LAN
+          unset S376_ALLOW_LAN
+          ctest --test-dir build --output-on-failure
+          ./build/s376-raster-parity --ours --icao KJFK | head
+          ./scripts/check-no-rsi.sh
+      - name: doctor
+        run: |
+          ./build/s376-cache synth-ksea --out cache/ksea --size 32
+          ./build/s376-doctor -c config/s376-visual.toml
+      - name: headless demo (loopback only)
+        run: |
+          ./build/s376-visual --headless --demo --duration 2 --bind 127.0.0.1:2300 -c config/s376-visual.toml
+          ./build/s376-visual --headless --demo kjfk --duration 0.3 -c config/s376-visual.toml
+          ./build/s376-visual --headless --demo kjfk --six-mile-final --start 6sm --duration 0.3 \
+            --reply-port 2301 -c config/s376-visual.toml
+          ./build/s376-visual --diagnostics --reply-port 23991 --mem-budget 512 \
+            -c config/s376-visual.toml > /tmp/s376-diag-reply.txt
+          grep -q "host.reply_port=23991" /tmp/s376-diag-reply.txt
+          grep -q "render.ram_mb=512" /tmp/s376-diag-reply.txt
+          set +e
+          ./build/s376-visual --headless --demo nope -c config/s376-visual.toml
+          nope_rc=$?
+          set -e
+          if [ "$nope_rc" -ne 2 ]; then
+            echo "--demo nope must exit 2 (got $nope_rc)" >&2
+            exit 1
+          fi
+          ./build/s376-visual --headless --demo-weather --duration 2 --bind 127.0.0.1:2300 -c config/s376-visual.toml
+          ./build/s376-visual --headless --at KJFK:04R:0 --duration 0.3 --bind 127.0.0.1:2300 -c config/s376-visual.toml
+          ./build/s376-visual --headless --at KJFK:04R:8 --alt 3000 --bank 30 --duration 0.3 --bind 127.0.0.1:2300 -c config/s376-visual.toml
+          ./build/s376-visual --headless --at KJFK --alt 12000 --hdg 036 --duration 0.3 --bind 127.0.0.1:2300 -c config/s376-visual.toml
+          ./build/s376-visual --headless --at KBOS:04R:3 --quality rtx --duration 0.3 --bind 127.0.0.1:2300 -c config/s376-visual.toml
+          ./build/s376-visual --headless --channel far_left --duration 0.3 --bind 127.0.0.1:2300 -c config/s376-visual.toml
+          ./build/s376-visual --headless --channel mid_left --duration 0.3 --bind 127.0.0.1:2300 -c config/s376-visual.toml
+          ./build/s376-visual --headless --demo --duration 0.3 --bind 127.0.0.1:2300 -c config/channels-3.toml
+          ./build/s376-visual --headless --self-test-shot /tmp/s376-shot-self
+          test -s /tmp/s376-shot-self/s376-shot-self.ppm
+          test -s /tmp/s376-shot-self/s376-shot-self.png
+          ./build/s376-visual --diagnostics --channel mid_left -c config/s376-visual.toml \
+            > /tmp/s376-diag-mid.txt
+          grep -q "selected=mid_left" /tmp/s376-diag-mid.txt
+          grep -q "channel mid_left" /tmp/s376-diag-mid.txt
+          if grep -q "channel far_right" /tmp/s376-diag-mid.txt; then
+            echo "diagnostics printed far_right for --channel mid_left" >&2
+            cat /tmp/s376-diag-mid.txt >&2
+            exit 1
+          fi
+          ./build/s376-visual --headless --channel mid_left --at KJFK --alt 12000 --hdg 036 --duration 0.2 \
+            -c config/s376-visual.toml > /tmp/s376-at-mid.log 2>&1
+          grep -q "selected=mid_left" /tmp/s376-at-mid.log
+          grep -q "channel mid_left" /tmp/s376-at-mid.log
+          grep -q "no host socket" /tmp/s376-at-mid.log
+          grep -q "alt_ft=12000" /tmp/s376-at-mid.log
+          if grep -q "channel far_right" /tmp/s376-at-mid.log; then
+            echo "--at --channel mid_left dump printed far_right" >&2
+            cat /tmp/s376-at-mid.log >&2
+            exit 1
+          fi
+      - name: SIGTERM stops the IG
+        run: |
+          set +e
+          timeout -k 2 3 ./build/s376-visual --headless --demo --duration 3600 --bind 127.0.0.1:2300 -c config/s376-visual.toml
+          rc=$?
+          set -e
+          # 124 = SIGTERM honored; 137 = timeout had to SIGKILL
+          if [ "$rc" -eq 137 ]; then
+            echo "IG ignored SIGTERM" >&2
+            exit 1
+          fi
+          if [ "$rc" -ne 124 ] && [ "$rc" -ne 0 ]; then
+            echo "unexpected exit $rc" >&2
+            exit 1
+          fi
+      - name: no OpenGL error spam
+        run: |
+          ./build/s376-visual --headless --demo --duration 2 --bind 127.0.0.1:2300 -c config/s376-visual.toml \
+            > /tmp/s376-headless.log 2>&1
+          if grep -F "detected OpenGL error" /tmp/s376-headless.log; then
+            echo "GL errors in headless log" >&2
+            exit 1
+          fi
+          xvfb-run -a ./build/s376-visual --demo --duration 2 --channel mid_left -c config/s376-visual.toml \
+            > /tmp/s376-xvfb.log 2>&1 || true
+          if grep -F "detected OpenGL error" /tmp/s376-xvfb.log; then
+            echo "GL errors in xvfb log" >&2
+            exit 1
+          fi
+      - name: refuse sim LAN
+        run: |
+          if ./build/s376-synth --dest 10.1.95.1:2300 --duration 0.1; then
+            echo "synth must refuse the sim LAN" >&2
+            exit 1
+          fi
+          if ./build/s376-synth --dest 192.168.173.10:2300 --duration 0.1; then
+            echo "synth must refuse the visual LAN" >&2
+            exit 1
+          fi
+      - name: offline tile cache
+        run: |
+          ./build/s376-cache synth-ksea --out /tmp/s376-ci-ksea --size 64 --lods
+          ./build/s376-cache info /tmp/s376-ci-ksea
+          ./build/s376-cache fetch KSEA --dry-run --out /tmp/s376-ci-ksea | head
+          ./build/s376-cache osm KSFO --dry-run | head
+          if ./build/s376-cache synth-ksea --out 10.1.95.1:2300; then
+            echo "cache must refuse a sim-LAN dest" >&2
+            exit 1
+          fi
+          if ./build/s376-cache fetch KSEA --dry-run --out 10.1.95.1:2300; then
+            echo "fetch must refuse a sim-LAN dest" >&2
+            exit 1
+          fi
+          ./build/s376-cache fetch KEWR --plan --out /tmp/s376-ci-kewr \
+            --near-m 10 --max-export 256 --radius-km 8 --approach-nm 2 --near-km 4
+          test -s /tmp/s376-ci-kewr/fetch.plan.toml
+          ./build/s376-visual --headless --bench --quality gtx980ti --bind 127.0.0.1:2300 \
+            | tee /tmp/s376-bench.txt
+          grep -q "gtx980ti" /tmp/s376-bench.txt
+          grep -q "budget=" /tmp/s376-bench.txt
+          grep -q "SUMMARY  s376 --bench" /tmp/s376-bench.txt
+          grep -q "result=" /tmp/s376-bench.txt
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DS376_WITH_OSG=OFF -DS376_WITH_GDAL=OFF
+      - name: build
+        run: cmake --build build --config Release
+      - name: unit tests
+        run: |
+          $env:S376_ALLOW_SIM_LAN = ""
+          $env:S376_ALLOW_LAN = ""
+          ctest --test-dir build -C Release --output-on-failure
+      - name: pack zip
+        shell: pwsh
+        run: ./scripts/pack-windows.ps1 -BuildDir build -OutZip s376-visual-windows.zip
+      - name: pack has no imagery
+        shell: pwsh
+        run: |
+          if (-not (Test-Path s376-visual-windows.zip)) { throw "zip missing" }
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $z = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path s376-visual-windows.zip))
+          try {
+            foreach ($e in $z.Entries) {
+              $n = $e.FullName.ToLowerInvariant()
+              if ($n -match '\.(nxt|nxb|nx3|nxs|nxo|tif|tiff|jp2)$') {
+                throw "zip contains $n"
+              }
+            }
+          } finally { $z.Dispose() }

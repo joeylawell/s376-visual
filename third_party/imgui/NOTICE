@@ -1,0 +1,3 @@
+Dear ImGui v1.91.8 (MIT). https://github.com/ocornut/imgui
+Vendored for s376-wizard (operator console). Only the core +
+GLFW / OpenGL3 backends are copied. See LICENSE.txt.

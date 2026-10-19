@@ -1,0 +1,453 @@
+# KJFK reference. PUBLIC FAA SOURCES ONLY. Built 2026-10-18 for the s376-visual accuracy audit.
+# Primary: NASR 28-day subscription effective 2026-10-01 (APT/ILS/AWOS CSV), d-TPP cycle 2610 (01 OCT-29 OCT 2026),
+# Chart Supplement NE (03 SEP-29 OCT 2026). Derived values (geodesic bearing/length) were computed with WGS-84 geodesics (GeographicLib).
+# Lat/lon are decimal degrees WGS-84/NAD83 as published; elevations are ft MSL as published; lengths are ft.
+
+[meta]
+icao = "KJFK"
+faa_id = "JFK"
+name = "JOHN F KENNEDY INTL"
+nasr_effective = "2026-10-01"
+dtpp_cycle = "2610"
+dtpp_valid = "2026-10-01/2026-10-29"
+chart_supplement_valid = "2026-09-03/2026-10-29"
+retrieved = "2026-10-18"
+sources = ["https://nfdc.faa.gov/webContent/28DaySub/extra/01_Oct_2026_APT_CSV.zip", "https://nfdc.faa.gov/webContent/28DaySub/extra/01_Oct_2026_ILS_CSV.zip", "https://nfdc.faa.gov/webContent/28DaySub/extra/01_Oct_2026_AWOS_CSV.zip", "https://aeronav.faa.gov/d-tpp/2610/00610ad.pdf", "https://aeronav.faa.gov/d-tpp/2610/00610il4r.pdf", "https://aeronav.faa.gov/d-tpp/2610/00610il13l.pdf", "https://aeronav.faa.gov/afd/03sep2026/ne_225_03SEP2026.pdf"]
+
+[airport]
+arp_lat = 40.63992805
+arp_lon = -73.77869222
+arp_dms = "40-38-23.741N 073-46-43.292W"
+elev_ft = 13
+mag_var_deg = -13.0  # 13 W, epoch 2020
+
+[awos]
+type = "ASOS"
+lat = 40.63917777
+lon = -73.76394444
+elev_ft = 13.8
+
+[[runway]]
+id = "04L/22R"
+length_ft = 12079
+width_ft = 200
+surface = "CONC-GRVD"
+edge_lights = "HIGH"  # HIRL
+
+[[runway]]
+id = "04R/22L"
+length_ft = 8400
+width_ft = 200
+surface = "ASPH-GRVD"
+edge_lights = "HIGH"  # HIRL
+
+[[runway]]
+id = "13L/31R"
+length_ft = 10000
+width_ft = 200
+surface = "CONC-GRVD"
+edge_lights = "HIGH"  # HIRL
+
+[[runway]]
+id = "13R/31L"
+length_ft = 14511
+width_ft = 200
+surface = "CONC-GRVD"
+edge_lights = "HIGH"  # HIRL
+
+[[end]]
+id = "04R"
+lat = 40.62542827
+lon = -73.77034558
+dms = "40-37-31.5418N 073-46-13.2441W"
+elev_ft = 11.9
+tdze_ft = 12
+true_alignment_nasr_deg = 31  # NASR, whole degrees
+true_bearing_geodesic_deg = 30.7680  # derived: WGS-84 inverse between the surveyed ends
+length_geodesic_ft = 8399.5  # derived
+displaced_ft = 0
+als = "ALSF-2"
+vgsi = "P4L"
+vgsi_side = "left"
+vgsi_angle_deg = 3.00
+vgsi_tch_ft = 69
+vgsi_count = 1
+reil = false  # none listed in the Chart Supplement
+centerline_lights = true
+tdz_lights = true
+edge_lights = "HIRL"
+rvr = "TMR"
+marking = "PIR"
+right_traffic = false
+tora_ft = 8400
+toda_ft = 8400
+asda_ft = 8400
+lda_ft = 8400
+remarks = ["EMAS 393 x 226 ft at the DER"]
+
+[end.ils]
+loc_ident = "I-JFK"
+loc_freq_mhz = 109.5
+category = "IIIB"
+approach_bearing_mag_deg = 43.76
+loc_lat = 40.64766405
+loc_lon = -73.75296447
+loc_site_elev_ft = 11.3
+gs_lat = 40.62836138
+gs_lon = -73.76973094
+gs_site_elev_ft = 12.6
+gs_angle_deg = 3.00
+gs_status = "OPERATIONAL IFR"
+dme_lat = 40.64813472
+dme_lon = -73.75366391
+dme_channel = "32X"
+
+[end.plate]
+procedure = "ILS or LOC RWY 4R"
+amendment = "Amdt 30B 21MAY20"
+url = "https://aeronav.faa.gov/d-tpp/2610/00610il4r.pdf"
+gs_angle_deg = 3.00
+ils_tch_ft = 53
+ils_gpi_from_thr_ft = 1011  # derived: TCH/tan(GPA)
+tdze_ft = 12
+rwy_ldg_ft = 8400
+als = "ALSF-2"
+app_crs_mag_deg = 44
+vgsi_note = "VGSI and ILS glidepath not coincident"
+
+[[end]]
+id = "13L"
+lat = 40.65776444
+lon = -73.79023905
+dms = "40-39-27.952N 073-47-24.8606W"
+elev_ft = 12.9
+tdze_ft = 13
+true_alignment_nasr_deg = 121  # NASR, whole degrees
+true_bearing_geodesic_deg = 120.7546  # derived: WGS-84 inverse between the surveyed ends
+length_geodesic_ft = 10000.0  # derived
+displaced_ft = 907
+dthr_lat = 40.65649133
+dthr_lon = -73.78743047
+dthr_elev_ft = 13
+als = "ALSF-2"  # plus RLLS lead-in, see remarks
+vgsi = "P4L"
+vgsi_side = "left"
+vgsi_angle_deg = 3.00
+vgsi_tch_ft = 74
+vgsi_count = 1
+reil = false  # none listed in the Chart Supplement
+centerline_lights = true
+tdz_lights = true
+edge_lights = "HIRL"
+rvr = "TR"
+marking = "PIR"
+right_traffic = true
+tora_ft = 10000
+toda_ft = 10000
+asda_ft = 10000
+lda_ft = 9093
+remarks = ["PAPI rotated 10 deg right of rwy centerline; unusable left of centerline", "RLLS lead-in: uses the 1000 ft ALS station; 5 SFL from 1200-2000 ft and a 5-SFL group about 1 NM out; approach gate angled 35 deg S of centerline", "Right traffic"]
+
+[end.ils]
+loc_ident = "I-TLK"
+loc_freq_mhz = 111.5
+category = "II"
+approach_bearing_mag_deg = 133.76
+loc_lat = 40.64185802
+loc_lon = -73.75516075
+loc_site_elev_ft = 13.4
+gs_lat = 40.654097
+gs_lon = -73.78468333
+gs_site_elev_ft = 10
+gs_angle_deg = 3.00
+gs_status = "OPERATIONAL RESTRICTED"
+dme_lat = 40.64264902
+dme_lon = -73.75506691
+dme_channel = "52X"
+
+[end.plate]
+procedure = "ILS or LOC RWY 13L"
+amendment = "Amdt 18D 29DEC22"
+url = "https://aeronav.faa.gov/d-tpp/2610/00610il13l.pdf"
+gs_angle_deg = 3.00
+ils_tch_ft = 58
+ils_gpi_from_thr_ft = 1107  # derived: TCH/tan(GPA)
+tdze_ft = 13
+rwy_ldg_ft = 9093
+als = "ALSF-2"
+app_crs_mag_deg = 134
+vgsi_note = "VGSI and ILS glidepath not coincident"
+
+[[end]]
+id = "22L"
+lat = 40.64523697
+lon = -73.75486186
+dms = "40-38-42.8531N 073-45-17.5027W"
+elev_ft = 11.9
+tdze_ft = 12
+true_alignment_nasr_deg = 211  # NASR, whole degrees
+true_bearing_geodesic_deg = 210.7781  # derived: WGS-84 inverse between the surveyed ends
+length_geodesic_ft = 8399.5  # derived
+displaced_ft = 0
+als = "ALSF-2"
+vgsi = "P4L"
+vgsi_side = "left"
+vgsi_angle_deg = 3.00
+vgsi_tch_ft = 66
+vgsi_count = 1
+reil = false  # none listed in the Chart Supplement
+centerline_lights = true
+tdz_lights = true
+edge_lights = "HIRL"
+rvr = "TMR"
+marking = "PIR"
+right_traffic = false
+tora_ft = 8400
+toda_ft = 8400
+asda_ft = 8400
+lda_ft = 8400
+remarks = ["ALSF2 non-standard light spacing", "PAPI horizontal offset 4 deg left", "EMAS 405 x 226 ft at the DER"]
+
+[end.ils]
+loc_ident = "I-IWY"
+loc_freq_mhz = 110.9
+category = "III"
+approach_bearing_mag_deg = 223.77
+loc_lat = 40.62430375
+loc_lon = -73.77122413
+loc_site_elev_ft = 9.4
+gs_lat = 40.64248169
+gs_lon = -73.75555008
+gs_site_elev_ft = 13
+gs_angle_deg = 3.00
+gs_status = "OPERATIONAL IFR"
+dme_lat = 40.6288383
+dme_lon = -73.77793861
+dme_channel = "46X"
+
+[[end]]
+id = "31R"
+lat = 40.64372458
+lon = -73.75927272
+dms = "40-38-37.4085N 073-45-33.3818W"
+elev_ft = 12.6
+tdze_ft = 13
+true_alignment_nasr_deg = 301  # NASR, whole degrees
+true_bearing_geodesic_deg = 300.7748  # derived: WGS-84 inverse between the surveyed ends
+length_geodesic_ft = 10000.0  # derived
+displaced_ft = 1027
+dthr_lat = 40.64516677
+dthr_lon = -73.76245294
+dthr_elev_ft = 12.6
+als = "MALSR"
+vgsi = "P4R"
+vgsi_side = "right"
+vgsi_angle_deg = 3.00
+vgsi_tch_ft = 54
+vgsi_count = 1
+reil = false  # none listed in the Chart Supplement
+centerline_lights = true
+tdz_lights = true
+edge_lights = "HIRL"
+rvr = "TR"
+marking = "PIR"
+right_traffic = false
+tora_ft = 10000
+toda_ft = 10000
+asda_ft = 9513
+lda_ft = 8486
+
+[end.ils]
+loc_ident = "I-RTH"
+loc_freq_mhz = 111.5
+category = "I"
+approach_bearing_mag_deg = 313.77
+loc_lat = 40.65855183
+loc_lon = -73.79197705
+loc_site_elev_ft = 11.5
+gs_lat = 40.64731377
+gs_lon = -73.7641728
+gs_site_elev_ft = 9.6
+gs_angle_deg = 3.00
+gs_status = "OPERATIONAL IFR"
+dme_lat = 40.64264902
+dme_lon = -73.75506691
+dme_channel = "52X"
+
+[[end]]
+id = "04L"
+lat = 40.62202094
+lon = -73.78558413
+dms = "40-37-19.2754N 073-47-8.1029W"
+elev_ft = 11.9
+tdze_ft = 12.7
+true_alignment_nasr_deg = 31  # NASR, whole degrees
+true_bearing_geodesic_deg = 30.7583  # derived: WGS-84 inverse between the surveyed ends
+length_geodesic_ft = 12079.0  # derived
+displaced_ft = 460
+dthr_lat = 40.62310611
+dthr_lon = -73.78473736
+dthr_elev_ft = 12.4
+als = "NONE"
+vgsi = "P4L"
+vgsi_side = "left"
+vgsi_angle_deg = 3.00
+vgsi_tch_ft = 75
+vgsi_count = 1
+reil = false  # none listed in the Chart Supplement
+centerline_lights = true
+tdz_lights = true
+edge_lights = "HIRL"
+rvr = "TR"
+marking = "PIR"
+right_traffic = false
+tora_ft = 11351
+toda_ft = 11351
+asda_ft = 11470
+lda_ft = 11010
+
+[end.ils]
+loc_ident = "I-HIQ"
+loc_freq_mhz = 110.9
+category = "I"
+approach_bearing_mag_deg = 43.75
+loc_lat = 40.65193502
+loc_lon = -73.7622068
+loc_site_elev_ft = 10.9
+gs_lat = 40.62530302
+gs_lon = -73.78191402
+gs_site_elev_ft = 9.9
+gs_angle_deg = 3.00
+gs_status = "OPERATIONAL RESTRICTED"
+dme_lat = 40.6288383
+dme_lon = -73.77793861
+dme_channel = "46X"
+
+[[end]]
+id = "22R"
+lat = 40.65050938
+lon = -73.76332211
+dms = "40-39-1.8338N 073-45-47.9596W"
+elev_ft = 12.5
+tdze_ft = 12.7
+true_alignment_nasr_deg = 211  # NASR, whole degrees
+true_bearing_geodesic_deg = 210.7728  # derived: WGS-84 inverse between the surveyed ends
+length_geodesic_ft = 12079.0  # derived
+displaced_ft = 3424
+dthr_lat = 40.64243358
+dthr_lon = -73.76963536
+dthr_elev_ft = 12.6
+als = "NONE"
+vgsi = "P4L"
+vgsi_side = "left"
+vgsi_angle_deg = 3.00
+vgsi_tch_ft = 77
+vgsi_count = 1
+reil = false  # none listed in the Chart Supplement
+centerline_lights = true
+tdz_lights = false
+edge_lights = "HIRL"
+rvr = "TR"
+marking = "PIR"
+right_traffic = false
+tora_ft = 12079
+toda_ft = 12079
+asda_ft = 11219
+lda_ft = 7795
+remarks = ["PAPI unusable beyond 8 deg right of centerline"]
+
+[end.ils]
+loc_ident = "I-JOC"
+loc_freq_mhz = 109.5
+category = "I"
+approach_bearing_mag_deg = 221.24
+loc_lat = 40.6290215
+loc_lon = -73.77864077
+loc_site_elev_ft = 8.3
+gs_lat = 40.6392455
+gs_lon = -73.7705353
+gs_site_elev_ft = 8.7
+gs_angle_deg = 3.00
+gs_status = "OPERATIONAL IFR"
+dme_lat = 40.64813472
+dme_lon = -73.75366391
+dme_channel = "32X"
+
+[[end]]
+id = "13R"
+lat = 40.64836133
+lon = -73.81671472
+dms = "40-38-54.1008N 073-49-0.173W"
+elev_ft = 12.5
+tdze_ft = 12.6
+true_alignment_nasr_deg = 121  # NASR, whole degrees
+true_bearing_geodesic_deg = 120.7382  # derived: WGS-84 inverse between the surveyed ends
+length_geodesic_ft = 14511.5  # derived
+displaced_ft = 2044
+dthr_lat = 40.64549422
+dthr_lon = -73.8103848
+dthr_elev_ft = 12.5
+als = "RLLS"
+vgsi = "P4L"
+vgsi_side = "left"
+vgsi_angle_deg = 3.00
+vgsi_tch_ft = 79
+vgsi_count = 2
+reil = false  # none listed in the Chart Supplement
+centerline_lights = true
+tdz_lights = false
+edge_lights = "HIRL"
+rvr = "TMR"
+marking = "PIR"
+right_traffic = true
+tora_ft = 14511
+toda_ft = 14511
+asda_ft = 14511
+lda_ft = 12467
+remarks = ["First P4L horizontal offset 22 deg left; second P4L with transitional TCH and 3 deg VGSI", "Right traffic", "Caution: Rwy 13R can be confused with Rwy 13L"]
+
+[[end]]
+id = "31L"
+lat = 40.62799441
+lon = -73.77178075
+dms = "40-37-40.7799N 073-46-18.4107W"
+elev_ft = 12.6
+tdze_ft = 12.7
+true_alignment_nasr_deg = 301  # NASR, whole degrees
+true_bearing_geodesic_deg = 300.7674  # derived: WGS-84 inverse between the surveyed ends
+length_geodesic_ft = 14511.5  # derived
+displaced_ft = 3264
+dthr_lat = 40.63257736
+dthr_lon = -73.78188547
+dthr_elev_ft = 12.6
+als = "NONE"
+vgsi = "P4L"
+vgsi_side = "left"
+vgsi_angle_deg = 3.00
+vgsi_tch_ft = 74
+vgsi_count = 1
+reil = false  # none listed in the Chart Supplement
+centerline_lights = true
+tdz_lights = false
+edge_lights = "HIRL"
+rvr = "TMR"
+marking = "PIR"
+right_traffic = false
+tora_ft = 14511
+toda_ft = 14511
+asda_ft = 14511
+lda_ft = 11247
+
+[end.ils]
+loc_ident = "I-MOH"
+loc_freq_mhz = 111.35
+category = "I"
+approach_bearing_mag_deg = 313.76
+loc_lat = 40.6499045
+loc_lon = -73.82013575
+loc_site_elev_ft = 12.4
+gs_lat = 40.63329788
+gs_lon = -73.78594675
+gs_site_elev_ft = 8.6
+gs_angle_deg = 3.00
+gs_status = "OPERATIONAL IFR"

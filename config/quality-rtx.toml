@@ -1,0 +1,78 @@
+# Overlay / example for a newer GPU (hangar RTX 5060 Ti).
+# Use: s376-visual --config config/quality-rtx.toml --channel mid_left
+# or   s376-visual --quality rtx
+#
+# Same 3-frustum-on-4-PC mapping as s376-visual.toml.
+# Expensive levers on: SSAO (cheap baked), shadows (one-cascade sun CSM).
+# MSAA 4 / AF 16 / bloom / FXAA / filmic stay.
+
+[host]
+bind = "0.0.0.0:2300"
+reply_port = 2301
+hat_responder = true
+reply_master = "mid_left"
+
+[render]
+engine = "auto"
+earth_file = "data/earth/s376.earth"
+frame_rate = 60
+vsync = true
+quality = "rtx"
+msaa = 4
+aniso = 16
+hdr = true
+atmosphere = true
+water = true
+markings = true
+detail_textures = true
+buildings = true
+ssao = true
+shadows = true
+bloom = true
+fxaa = true
+filmic = true
+exposure = 1.05
+sync_to_host = true
+
+[[channels]]
+name = "far_left"
+heading_offset_deg = -50.0
+pitch_offset_deg = 0.0
+roll_offset_deg = 0.0
+hfov_deg = 50.0
+vfov_deg = 32.5
+flip_vertical = true
+resolution = "1920x1200"
+enabled = true
+
+[[channels]]
+name = "mid_left"
+heading_offset_deg = 0.0
+hfov_deg = 50.0
+vfov_deg = 32.5
+flip_vertical = false
+monitor = 1
+resolution = "1920x1200"
+enabled = true
+
+[[channels]]
+name = "mid_right"
+heading_offset_deg = 0.0
+hfov_deg = 50.0
+vfov_deg = 32.5
+flip_vertical = false
+monitor = 2
+resolution = "1920x1200"
+enabled = true
+
+[[channels]]
+name = "far_right"
+heading_offset_deg = 50.0
+pitch_offset_deg = 0.0
+roll_offset_deg = 0.0
+hfov_deg = 50.0
+vfov_deg = 32.5
+flip_vertical = false
+monitor = 3
+resolution = "1920x1200"
+enabled = true

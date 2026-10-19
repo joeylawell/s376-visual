@@ -1,0 +1,142 @@
+# s376-visual — default projector-PC config.
+# Copy to config/local.toml (gitignored) for machine-specific ports / LAN flags.
+#
+# Collimated cross-cockpit display. Channel count is this [[channels]]
+# list — not hardcoded to 3. Default is four projector PCs. Heading,
+# FOV, and resolution are per-channel (default 1920×1200, 50×32.5).
+# Heading offset is added to true heading. Left flip_vertical is
+# a projector framebuffer mirror only. Captain sees far_left + mid_left;
+# FO sees mid_right + far_right (mirrors hide the other side). The two
+# middle projectors show the SAME front view — a duplicated front, not a split.
+#
+#   far_left  PC  = Raster left   (−50)
+#   mid_left  PC  = Raster front  (0)      captain
+#   mid_right PC  = Raster front  (0)      FO duplicate
+#   far_right PC  = Raster right  (+50)
+#
+# Each PC:
+#   s376-visual --config config/s376-visual.toml --channel mid_left
+#   # or S376_CHANNEL=mid_left
+# Aliases: left→far_left, front→mid_left, right→far_right, front_fo→mid_right
+#
+# All four bind UDP 2300 and consume the same xT4 stream (host broadcast /
+# multicast / fan-out). Only reply_master sends the type-200 HAT reply.
+#
+# Laptop 3-window alternative: config/channels-3.toml
+# One-PC 4-monitor hangar desk: config/desk-4monitor.toml
+#
+# Simulator LANs 10.1.95.0/24 and 192.168.173.0/24 are refused as destinations
+# unless allow_sim_lan is true (production IG PC only). Tests and CI never set it.
+
+[host]
+bind = "0.0.0.0:2300"
+reply_port = 2301
+word_order = "auto"       # auto | le | be
+float_format = "auto"     # auto | vax | ieee
+hat_responder = true
+reply_master = "mid_left" # only this --channel sends HAT; others listen
+allow_sim_lan = false
+allow_lan = false
+
+[render]
+engine = "auto"           # auto | osgearth | osg | null
+earth_file = "data/earth/s376.earth"
+cache_dir = ""            # packed region from s376-cache; empty = synth KSEA DEM
+frame_rate = 60
+window_title = "s376-visual"
+vsync = true
+msaa = 0                  # TAA is the 980 Ti AA (GTA V). rtx keeps 4x MSAA.
+aniso = 16
+quality = "gtx980ti"      # gtx980ti | rtx | custom
+# gtx980ti: one channel on 6 GB Maxwell / 16 GB RAM — hdr/atmosphere/water/
+# markings/detail/buildings/ssao/bloom/fxaa/taa/clustered/lod_fade/filmic
+# and cheap 2-cascade CSM on; autodrop if GPU > 12.20 ms.
+# solar_astronomy = false  # default: host TOD buckets drive sun elevation
+#                          # true = date/lon sun_ecef (operator dusk may be day)
+# CPU tile budget 2 GB. Per-feature GPU ms: docs/QUALITY.md.
+# ram_mb = 2048
+# vram_mb = 5120
+# mesh_n = 96
+sync_to_host = true       # draw only when a new type-100 eyepoint arrives
+
+[control]
+# s376-wizard local channel. Not xT4. Loopback only in this tree.
+bind = "127.0.0.1:2376"
+enabled = true
+
+# Hidden developer egg (off until version×7 unlock + explicit Missiles On).
+# PTT is a rising edge on an *existing* host field — never a new xT4 type.
+#   switch      = type 112 switch (default 255; airport lights use 1–4)
+#   landing_bit = unused bit of type 109 landing_mask (default 7; lobes are 0–6)
+#   key         = desk/demo keyboard (default m)
+[egg]
+ptt_source = "switch"
+ptt_switch = 255
+# ptt_landing_bit = 7
+# ptt_key = "m"
+
+[log]
+verbose = false
+debug = false
+dir = "logs"
+
+# Production: one process per PC via --channel <name>.
+# Laptop: omit --channel (or --channel all) to tile all four.
+
+[[channels]]
+name = "far_left"             # Raster left — captain outboard
+heading_offset_deg = -50.0    # aviation: look left = true heading − 50
+pitch_offset_deg = 0.0
+roll_offset_deg = 0.0
+hfov_deg = 50.0
+vfov_deg = 32.5
+flip_vertical = true          # projector framebuffer mirror only
+monitor = 0
+resolution = "1920x1200"      # 16:10 until Joey confirms projector res
+fullscreen = false
+enabled = true
+
+[[channels]]
+name = "mid_left"             # Raster front — captain inboard
+heading_offset_deg = 0.0
+pitch_offset_deg = 0.0
+roll_offset_deg = 0.0
+hfov_deg = 50.0
+vfov_deg = 32.5
+flip_vertical = false
+monitor = 1
+resolution = "1920x1200"
+fullscreen = false
+enabled = true
+
+[[channels]]
+name = "mid_right"            # Raster front — FO inboard (duplicate)
+heading_offset_deg = 0.0
+pitch_offset_deg = 0.0
+roll_offset_deg = 0.0
+hfov_deg = 50.0
+vfov_deg = 32.5
+flip_vertical = false
+# Optional FO seat offset (metres, aircraft body). 0 = same eye as mid_left.
+# eye_right_m = 0.51
+# eye_fwd_m = 0.0
+# eye_up_m = 0.0
+monitor = 2
+resolution = "1920x1200"
+fullscreen = false
+enabled = true
+
+[[channels]]
+name = "far_right"            # Raster right — FO outboard
+heading_offset_deg = 50.0     # look right = true heading + 50
+pitch_offset_deg = 0.0
+roll_offset_deg = 0.0
+hfov_deg = 50.0
+vfov_deg = 32.5
+flip_vertical = false
+# Same optional FO offset as mid_right if you enable a per-seat eye.
+# eye_right_m = 0.51
+monitor = 3
+resolution = "1920x1200"
+fullscreen = false
+enabled = true

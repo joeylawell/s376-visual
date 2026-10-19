@@ -1,0 +1,65 @@
+# KLAS — official FAA Chart Supplement / NASR 2026-10-02 (src/faa.cpp).
+# 08L/26R is 14835×150 (not 14511). 26R MALS, 26L MALSF, 01L MALSF —
+# not ALSF-2. Official wins over older charted guesses.
+# Packet-112 switch numbers are ours, not RSI's.
+
+icao = "KLAS"
+name = "Harry Reid International"
+arp_lat = 36.080333
+arp_lon = -115.1525
+elev_ft = 2183
+attribution = "FAA Chart Supplement / NFDC NASR 2026-10-02, cross-checked OurAirports"
+
+[lights]
+edge_switch = 1
+centerline_switch = 2
+approach_switch = 3
+threshold_switch = 4
+
+[[runways]]
+ident_le = "08L"
+ident_he = "26R"
+le_lat = 36.08620
+le_lon = -115.17450
+le_elev_ft = 2181
+heading_deg = 90.0
+length_ft = 14835
+width_ft = 150
+approach_le = "NONE"
+approach_he = "MALS"
+
+[[runways]]
+ident_le = "08R"
+ident_he = "26L"
+le_lat = 36.08050
+le_lon = -115.16800
+le_elev_ft = 2181
+heading_deg = 90.0
+length_ft = 10526
+width_ft = 150
+approach_le = "MALSR"
+approach_he = "ALSF-2"
+
+[[runways]]
+ident_le = "01L"
+ident_he = "19R"
+le_lat = 36.07400
+le_lon = -115.16300
+le_elev_ft = 2171
+heading_deg = 18.0
+length_ft = 8985
+width_ft = 150
+approach_le = "MALSR"
+approach_he = "MALSR"
+
+[[runways]]
+ident_le = "01R"
+ident_he = "19L"
+le_lat = 36.07200
+le_lon = -115.15800
+le_elev_ft = 2171
+heading_deg = 18.0
+length_ft = 9771
+width_ft = 150
+approach_le = "MALSR"
+approach_he = "MALSR"

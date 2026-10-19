@@ -1,0 +1,21 @@
+# Fetch / import plan. No imagery in git. --plan only.
+name = "SKRG"
+icao = "SKRG"
+south = 5.499031
+north = 6.829969
+west = -76.092439
+east = -74.753761
+near_m = 0
+near_dem_m = 30.0
+mid_m = 4.0
+far_m = 20.0
+near_km = 8.0
+mid_km = 40.0
+approach_nm = 12.0
+radius_km = 74.080
+imagery = "raster-local"
+dem = "glo30"
+policy = "raster-local"
+local_import = true
+source = "No verified public source as sharp as Raster. Local-only import-raster."
+airports = ["SKRG"]

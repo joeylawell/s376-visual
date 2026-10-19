@@ -1,0 +1,49 @@
+# Optional osgEarth build. Ubuntu 24.04 does not package osgEarth;
+# compiling it on every PR is ~20–40 minutes and is not practical.
+# Trigger from Actions → osgEarth (source) → Run workflow.
+name: osgearth
+
+on:
+  workflow_dispatch:
+
+jobs:
+  source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake g++ git \
+            libopenscenegraph-dev libgl-dev libglew-dev \
+            libgdal-dev libgeos-dev libproj-dev \
+            libprotobuf-dev protobuf-compiler \
+            libtinyxml-dev libcurl4-openssl-dev libsqlite3-dev
+      - name: osgEarth from source
+        run: |
+          git clone --depth 1 --branch osgearth-3.7.2 https://github.com/gwaldron/osgearth.git /tmp/osgearth
+          cmake -S /tmp/osgearth -B /tmp/osgearth/build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_CXX_COMPILER=g++ \
+            -DOSGEARTH_BUILD_TOOLS=OFF \
+            -DOSGEARTH_BUILD_EXAMPLES=OFF \
+            -DOSGEARTH_BUILD_TESTS=OFF \
+            -DOSGEARTH_BUILD_IMGUI_NODEKIT=OFF \
+            -DOSGEARTH_ENABLE_FASTDXT=OFF
+          cmake --build /tmp/osgearth/build -j $(nproc)
+          sudo cmake --install /tmp/osgearth/build
+      - name: configure s376-visual
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=g++
+      - name: build
+        run: cmake --build build -j $(nproc)
+      - name: unit tests
+        run: |
+          unset S376_ALLOW_SIM_LAN
+          unset S376_ALLOW_LAN
+          ctest --test-dir build --output-on-failure
+      - name: doctor should see osgEarth
+        run: |
+          ./build/s376-doctor -c config/s376-visual.toml | tee /tmp/doctor.txt
+          grep -q "osgearth" /tmp/doctor.txt

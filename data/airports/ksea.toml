@@ -1,0 +1,55 @@
+# KSEA — official FAA Chart Supplement / NASR 2026-10-02 (src/faa.cpp).
+# OurAirports is a cross-check only. 16L synth takeoff 47.463684/-122.307751
+# is historical s376-synth; live layout uses both official ends.
+# ALS: 16L/16C/16R ALSF-2 + TDZ; 34R/34C/34L MALSR; 34R PAPI 2.75°.
+# Taxi connectors in the binary are schematic; OSM aeroway=* (ODbL) later.
+# Packet-112 switch numbers are ours, not RSI's.
+
+icao = "KSEA"
+name = "Seattle-Tacoma International"
+arp_lat = 47.449833
+arp_lon = -122.311833
+elev_ft = 432
+attribution = "FAA Chart Supplement / NFDC NASR 2026-10-02, cross-checked OurAirports"
+
+[lights]
+edge_switch = 1
+centerline_switch = 2
+approach_switch = 3
+threshold_switch = 4
+
+[[runways]]
+ident_le = "16L"
+ident_he = "34R"
+le_lat = 47.463799
+le_lon = -122.307999
+le_elev_ft = 432
+heading_deg = 180
+length_ft = 11901
+width_ft = 150
+approach_le = "ALSF-2"
+approach_he = "MALSR"
+
+[[runways]]
+ident_le = "16C"
+ident_he = "34C"
+le_lat = 47.45583
+le_lon = -122.31155
+le_elev_ft = 429
+heading_deg = 180.3
+length_ft = 9426
+width_ft = 150
+approach_le = "MALSR"
+approach_he = "MALSR"
+
+[[runways]]
+ident_le = "16R"
+ident_he = "34L"
+le_lat = 47.45349
+le_lon = -122.31775
+le_elev_ft = 429
+heading_deg = 180.3
+length_ft = 8500
+width_ft = 150
+approach_le = "MALSR"
+approach_he = "MALSR"

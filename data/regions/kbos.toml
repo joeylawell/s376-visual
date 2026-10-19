@@ -1,0 +1,21 @@
+# Fetch / import plan. No imagery in git. --plan only.
+name = "KBOS"
+icao = "KBOS"
+south = 41.697531
+north = 43.028469
+west = -71.906966
+east = -70.105700
+near_m = 0.15
+near_dem_m = 1.0
+mid_m = 0.6
+far_m = 2.4
+near_km = 8.0
+mid_km = 40.0
+approach_nm = 12.0
+radius_km = 74.080
+imagery = "massgis"
+dem = "3dep"
+policy = "public"
+local_import = false
+source = "MassGIS 2023 15 cm. Download / WMTS then import-raster."
+airports = ["KBOS"]

@@ -1,0 +1,21 @@
+# Fetch / import plan. No imagery in git. --plan only.
+name = "KSFO"
+icao = "KSFO"
+south = 36.953364
+north = 38.284302
+west = -123.215644
+east = -121.535356
+near_m = 0.15
+near_dem_m = 1.0
+mid_m = 0.6
+far_m = 2.4
+near_km = 8.0
+mid_km = 40.0
+approach_nm = 12.0
+radius_km = 74.080
+imagery = "sanmateo"
+dem = "3dep"
+policy = "public"
+local_import = false
+source = "San Mateo 2022 ImageServer 15 cm. Live --imagery sanmateo."
+airports = ["KSFO"]

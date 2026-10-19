@@ -1,0 +1,21 @@
+# Fetch / import plan. No imagery in git. --plan only.
+name = "EGLL"
+icao = "EGLL"
+south = 50.804531
+north = 52.135469
+west = -1.522598
+east = 0.613998
+near_m = 0.25
+near_dem_m = 30.0
+mid_m = 1.0
+far_m = 4.0
+near_km = 8.0
+mid_km = 40.0
+approach_nm = 12.0
+radius_km = 74.080
+imagery = "ea-vap"
+dem = "glo30"
+policy = "public"
+local_import = false
+source = "EA Vertical Aerial Photography (OGL). Confirm Heathrow coverage, then import-raster."
+airports = ["EGLL"]

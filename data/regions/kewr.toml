@@ -1,0 +1,21 @@
+# Fetch / import plan. No imagery in git. --plan only.
+name = "KEWR"
+icao = "KEWR"
+south = 40.027031
+north = 41.357969
+west = -75.046340
+east = -73.290994
+near_m = 0.3
+near_dem_m = 1.0
+mid_m = 1.2
+far_m = 4.8
+near_km = 8.0
+mid_km = 40.0
+approach_nm = 12.0
+radius_km = 74.080
+imagery = "njogis"
+dem = "3dep"
+policy = "public"
+local_import = false
+source = "NJOGIS 2020 30 cm COG s3://njogis-imagery/2020. --plan only; download COGs then import-raster."
+airports = ["KEWR"]

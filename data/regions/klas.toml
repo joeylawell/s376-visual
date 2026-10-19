@@ -1,0 +1,21 @@
+# Fetch / import plan. No imagery in git. --plan only.
+name = "KLAS"
+icao = "KLAS"
+south = 35.414864
+north = 36.745802
+west = -115.975904
+east = -114.329096
+near_m = 0.15
+near_dem_m = 1.0
+mid_m = 0.6
+far_m = 2.4
+near_km = 8.0
+mid_km = 40.0
+approach_nm = 12.0
+radius_km = 74.080
+imagery = "clark"
+dem = "3dep"
+policy = "public"
+local_import = false
+source = "Clark County cached imagery. Download then import-raster. Confirm native m/px."
+airports = ["KLAS"]

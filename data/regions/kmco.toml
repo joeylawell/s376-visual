@@ -1,0 +1,21 @@
+# Fetch / import plan. No imagery in git. --plan only.
+name = "KMCO"
+icao = "KMCO"
+south = 27.763864
+north = 29.094802
+west = -82.065726
+east = -80.552274
+near_m = 0.15
+near_dem_m = 1.0
+mid_m = 0.6
+far_m = 2.4
+near_km = 8.0
+mid_km = 40.0
+approach_nm = 12.0
+radius_km = 74.080
+imagery = "ocpa"
+dem = "3dep"
+policy = "public"
+local_import = false
+source = "OCPA Aerials2025. Download then import-raster."
+airports = ["KMCO"]

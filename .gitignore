@@ -1,0 +1,95 @@
+# Build
+/build/
+/build-*/
+/out/
+/cmake-build-*/
+CMakeUserPresets.json
+compile_commands.json
+
+# IDE
+.idea/
+.vscode/
+*.user
+*.suo
+*.sdf
+*.opensdf
+.vs/
+
+# Runtime
+/logs/
+/recordings/
+/cache/
+/downloads/
+*.tif
+*.tiff
+*.jsonl
+data/airports/*.osm.json
+
+# Local overrides (may contain LAN addresses)
+config/local*.toml
+config/wizard-local.toml
+
+# Phone photos of the live Raster — reference only, never commit
+/refs/
+refs/*.jpg
+refs/*.jpeg
+refs/*.png
+raster-*.jpg
+raster-*.jpeg
+
+# CC0 detail textures downloaded by scripts/fetch-textures.sh
+/cache/textures/
+
+# Licensed / proprietary reference — never commit
+uploads/
+reference/
+737-drive/
+nxHostPacket.h
+**/nxHostPacket.h
+RasterXT*
+CERTS*
+*.nxb
+*.nxt
+*.nxs
+*.nxo
+*.nx3
+# Local Raster tree (parity tool reads this at runtime; never commit)
+/raster-local/
+*.pfx
+*.ddc
+*.cc
+*.wpp
+
+# Captures and host dumps
+*.pcap
+*.pcapng
+*.img
+*.imgc
+*.dld
+*.DLD
+*.pkl
+*.FOR
+*.INC
+*.CDB
+*.XSL
+
+# Objects / binaries we do not ship
+*.o
+*.obj
+*.a
+*.lib
+*.dll
+*.so
+*.dylib
+*.exe
+*.pdb
+
+# Python leftovers (this repo is C++)
+__pycache__/
+.venv/
+.pytest_cache/
+*.egg-info/
+
+# OS
+.DS_Store
+Thumbs.db

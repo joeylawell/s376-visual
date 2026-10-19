@@ -1,0 +1,95 @@
+# KEWR — FAA both physical ends.
+# Source: FAA NFDC airportDisplay + AIP AD 2 + chart supplement,
+# cross-checked AirNav / OurAirports.
+# Effective 2026-10-01, retrieved 2026-10-18.
+# Displaced 04L/22R use NFDC 2540.6 / 1440.9 ft (owner notes 2543 / 1423;
+# see docs/ACCURACY.md). 11/29 REIL + PAPI + EMAS.
+
+icao = "KEWR"
+name = "Newark Liberty International"
+arp_lat = 40.6925
+arp_lon = -74.1686666667
+elev_ft = 18
+attribution = "FAA NFDC / AIP AD 2 KEWR effective 2026-10-01, retrieved 2026-10-18"
+
+[source]
+name = "FAA NFDC airportDisplay KEWR + AIP AD 2 + chart supplement, cross-checked AirNav/OurAirports"
+effective = "2026-10-01"
+retrieved = "2026-10-18"
+
+[lights]
+edge_switch = 3
+centerline_switch = 4
+approach_switch = 1
+threshold_switch = 6
+
+[[runways]]
+ident_le = "04L"
+ident_he = "22R"
+le_lat = 40.6753814167
+le_lon = -74.1794487778
+he_lat = 40.7025600000
+he_lon = -74.1621717500
+le_elev_ft = 9.8
+he_elev_ft = 8.5
+length_ft = 11000
+width_ft = 150
+le_displaced_ft = 2540.6
+he_displaced_ft = 1440.9
+approach_le = "MALSR"
+approach_he = "MALSR"
+papi_le = "P4L"
+papi_he = "P4L"
+papi_deg_le = 3.10
+papi_deg_he = 3.10
+tdz_le = true
+tdz_he = true
+reil_he = true
+
+[[runways]]
+ident_le = "04R"
+ident_he = "22L"
+le_lat = 40.6775840833
+le_lon = -74.1742451389
+he_lat = 40.7022890000
+he_lon = -74.1585376667
+le_elev_ft = 11.0
+he_elev_ft = 9.0
+length_ft = 9999
+width_ft = 150
+le_displaced_ft = 1190.2
+he_displaced_ft = 1794.1
+approach_le = "ALSF-2"
+approach_he = "ALSF-2"
+papi_le = "P4L"
+papi_he = "P4L"
+papi_deg_le = 2.95
+papi_deg_he = 3.00
+tdz_le = true
+tdz_he = true
+
+[[runways]]
+ident_le = "11"
+ident_he = "29"
+le_lat = 40.7028043611
+le_lon = -74.1807074167
+he_lat = 40.7011994167
+he_lon = -74.1565435000
+le_elev_ft = 17.5
+he_elev_ft = 9.9
+length_ft = 6725
+width_ft = 150
+le_displaced_ft = 0
+he_displaced_ft = 224
+approach_le = "NONE"
+approach_he = "NONE"
+papi_le = "P4R"
+papi_he = "P4R"
+papi_deg_le = 3.00
+papi_deg_he = 3.00
+reil_le = true
+reil_he = true
+tdz_le = true
+tdz_he = true
+emas_le = true
+emas_he = true

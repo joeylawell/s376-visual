@@ -1,0 +1,16 @@
+<!-- Default osgEarth map. Development globe (Esri World Imagery).
+     Hangar KSEA path: data/earth/ksea.earth + cache/ksea GeoTIFFs.
+     If this file is missing or osgEarth is not linked, the IG uses the
+     procedural WGS84 globe. Attribution: Esri World Imagery (dev only).
+     See docs/SOURCES.md. Do not point a 60 Hz IG at OSM raster tiles. -->
+<map name="s376" type="geocentric" version="2">
+    <options>
+        <terrain>
+            <min_tile_range_ratio>6</min_tile_range_ratio>
+        </terrain>
+    </options>
+    <image name="esri-world-imagery" driver="xyz">
+        <url>https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}</url>
+        <profile>spherical-mercator</profile>
+    </image>
+</map>

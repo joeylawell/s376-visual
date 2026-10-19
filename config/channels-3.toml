@@ -1,0 +1,76 @@
+# Laptop / one-PC 3-window view of the same Raster frusta.
+# Live sim is four projector PCs (config/s376-visual.toml): both middles
+# are this "front" channel. Here we keep the three names for a desk.
+#
+#   s376-visual --config config/channels-3.toml --demo
+#   s376-visual --config config/channels-3.toml --channel front
+
+[host]
+bind = "0.0.0.0:2300"
+reply_port = 2301
+word_order = "auto"
+float_format = "auto"
+hat_responder = true
+reply_master = "front"
+allow_sim_lan = false
+allow_lan = false
+
+[render]
+engine = "auto"
+earth_file = "data/earth/s376.earth"
+frame_rate = 60
+window_title = "s376-visual"
+vsync = true
+msaa = 4
+aniso = 16
+quality = "gtx980ti"
+sync_to_host = false          # free-run at 60 on a laptop
+
+[control]
+bind = "127.0.0.1:2376"
+enabled = true
+
+# Hidden egg PTT (off until version×7 + Missiles On). Existing host field only.
+# switch = type 112 #255; landing_bit = type 109 bit 7; key = desk M.
+[egg]
+ptt_source = "switch"
+ptt_switch = 255
+
+[log]
+verbose = false
+debug = false
+dir = "logs"
+
+[[channels]]
+name = "front"
+heading_offset_deg = 0.0
+hfov_deg = 50.0
+vfov_deg = 32.5
+flip_vertical = false
+monitor = 0
+resolution = "1920x1200"
+enabled = true
+
+[[channels]]
+name = "left"
+heading_offset_deg = -50.0
+pitch_offset_deg = 0.0
+roll_offset_deg = 0.0
+hfov_deg = 50.0
+vfov_deg = 32.5
+flip_vertical = true          # projector framebuffer mirror only
+monitor = 1
+resolution = "1920x1200"
+enabled = true
+
+[[channels]]
+name = "right"
+heading_offset_deg = 50.0
+pitch_offset_deg = 0.0
+roll_offset_deg = 0.0
+hfov_deg = 50.0
+vfov_deg = 32.5
+flip_vertical = false
+monitor = 2
+resolution = "1920x1200"
+enabled = true

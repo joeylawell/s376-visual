@@ -1,0 +1,64 @@
+# KSFO — official FAA Chart Supplement / NASR 2026-10-02 (src/faa.cpp).
+# 28R ALSF-2; 28L MALSR; 19L MALSF; 10L/01L/01R REIL, no ALS.
+# EMAS on all four 01/19 ends. Packet-112 switch numbers are ours.
+
+icao = "KSFO"
+name = "San Francisco International"
+arp_lat = 37.618833
+arp_lon = -122.3755
+elev_ft = 13
+attribution = "FAA Chart Supplement / NFDC NASR 2026-10-02, cross-checked OurAirports"
+
+[lights]
+edge_switch = 1
+centerline_switch = 2
+approach_switch = 3
+threshold_switch = 4
+
+[[runways]]
+ident_le = "10L"
+ident_he = "28R"
+le_lat = 37.62855
+le_lon = -122.39335
+le_elev_ft = 13
+heading_deg = 118.0
+length_ft = 11870
+width_ft = 200
+approach_le = "MALSR"
+approach_he = "ALSF-2"
+
+[[runways]]
+ident_le = "10R"
+ident_he = "28L"
+le_lat = 37.62540
+le_lon = -122.39250
+le_elev_ft = 13
+heading_deg = 118.0
+length_ft = 11381
+width_ft = 200
+approach_le = "MALSR"
+approach_he = "MALSR"
+
+[[runways]]
+ident_le = "01L"
+ident_he = "19R"
+le_lat = 37.61350
+le_lon = -122.38950
+le_elev_ft = 11
+heading_deg = 18.0
+length_ft = 7650
+width_ft = 200
+approach_le = "MALSR"
+approach_he = "MALSR"
+
+[[runways]]
+ident_le = "01R"
+ident_he = "19L"
+le_lat = 37.61180
+le_lon = -122.38680
+le_elev_ft = 11
+heading_deg = 18.0
+length_ft = 8650
+width_ft = 200
+approach_le = "MALSR"
+approach_he = "MALSR"

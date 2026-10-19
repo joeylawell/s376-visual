@@ -1,0 +1,81 @@
+# KBOS — official FAA Chart Supplement / NASR 2026-10-02 (src/faa.cpp).
+# 04R ALSF-2; 33L ALSF-2; 15R MALSR (not ALSF-2); 22L MALSF; 14/32 present.
+# True heading of 04R is ~20°, not the old 35° OurAirports LE+hdg guess.
+# Packet-112 switch numbers are ours, not RSI's.
+#
+# Joey's Raster 4R daytime photo may be this field (hdg ~20°, 10006×150,
+# ALSF-2) or KJFK 04R (hdg 31°, 8400×200, ALSF-2). Compare with
+# `s376-visual --screenshot /tmp/bos-04r.ppm --at KBOS:04R:0 --channel mid_left`.
+
+icao = "KBOS"
+name = "Boston Logan International"
+arp_lat = 42.3630
+arp_lon = -71.006333
+elev_ft = 19
+attribution = "FAA Chart Supplement / NFDC NASR 2026-10-02, cross-checked OurAirports"
+
+[lights]
+edge_switch = 1
+centerline_switch = 2
+approach_switch = 3
+threshold_switch = 4
+
+[[runways]]
+ident_le = "04L"
+ident_he = "22R"
+le_lat = 42.35157
+le_lon = -71.01625
+le_elev_ft = 19
+heading_deg = 35.0
+length_ft = 7864
+width_ft = 150
+approach_le = "NONE"
+approach_he = "NONE"
+
+[[runways]]
+ident_le = "04R"
+ident_he = "22L"
+le_lat = 42.35106
+le_lon = -71.01153
+le_elev_ft = 19
+heading_deg = 20.0
+length_ft = 10006
+width_ft = 150
+approach_le = "ALSF-2"
+approach_he = "MALSF"
+
+[[runways]]
+ident_le = "09"
+ident_he = "27"
+le_lat = 42.36056
+le_lon = -71.02361
+le_elev_ft = 19
+heading_deg = 93.0
+length_ft = 7001
+width_ft = 150
+approach_le = "NONE"
+approach_he = "NONE"
+
+[[runways]]
+ident_le = "15R"
+ident_he = "33L"
+le_lat = 42.37444
+le_lon = -71.02389
+le_elev_ft = 16
+heading_deg = 150.0
+length_ft = 10083
+width_ft = 150
+approach_le = "MALSR"
+approach_he = "ALSF-2"
+
+[[runways]]
+ident_le = "15L"
+ident_he = "33R"
+le_lat = 42.37278
+le_lon = -71.01694
+le_elev_ft = 16
+heading_deg = 150.0
+length_ft = 2557
+width_ft = 100
+approach_le = "NONE"
+approach_he = "NONE"

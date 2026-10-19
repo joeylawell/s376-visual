@@ -1,0 +1,21 @@
+# Fetch / import plan. No imagery in git. --plan only.
+name = "KRNO"
+icao = "KRNO"
+south = 38.833698
+north = 40.164636
+west = -120.630582
+east = -118.905752
+near_m = 0.6
+near_dem_m = 1.0
+mid_m = 2.4
+far_m = 9.6
+near_km = 8.0
+mid_km = 40.0
+approach_nm = 12.0
+radius_km = 74.080
+imagery = "naip"
+dem = "3dep"
+policy = "either"
+local_import = true
+source = "USDA NAIP ~0.6 m is the only free source. import-raster if the local Raster pad is sharper."
+airports = ["KRNO"]

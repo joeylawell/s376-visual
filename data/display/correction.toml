@@ -1,0 +1,19 @@
+# Per-channel display correction (our words, not a vendor file).
+# 7×5 angular warp, 10 deg columns, rows at ±16.25 / ±10 / 0.
+# Leave the warp keys out for identity (output angle = input angle).
+# Edge ramp 0.5; a lower ramp leaves the blend brighter.
+# Swap this file per projector when hangar grids are measured.
+
+hfov_deg = 50.0
+vfov_deg = 32.5
+gamma = 1.0
+pattern = "none"
+
+blend.ramp = 0.5
+blend.left_px = 0
+blend.right_px = 0
+blend.top_px = 0
+blend.bottom_px = 0
+
+# Example (commented) warp node: row 2 col 3 is the centre.
+# warp.2.3 = 0.0, 0.0

@@ -1,0 +1,21 @@
+# Fetch / import plan. No imagery in git. --plan only.
+name = "KSEA"
+icao = "KSEA"
+south = 46.784364
+north = 48.115302
+west = -123.295912
+east = -121.327754
+near_m = 0.08
+near_dem_m = 1.0
+mid_m = 0.32
+far_m = 1.28
+near_km = 8.0
+mid_km = 40.0
+approach_nm = 12.0
+radius_km = 74.080
+imagery = "kingco"
+dem = "3dep"
+policy = "public"
+local_import = false
+source = "King County KingCo_Aerial_2023. Live --imagery kingco."
+airports = ["KSEA"]

@@ -1,0 +1,18 @@
+# s376-wizard — operator console on the Host IO / operator PC.
+# Talks to channel IGs over a local UDP control channel (S376C1).
+# This is NOT xT4 and never uses 2300/2301. Tests and this tree stay
+# on loopback. Copy to config/wizard-local.toml (gitignored) if a
+# hangar box needs other loopback ports. Never put simulator-LAN
+# addresses in this file.
+
+visual = "s376-visual"
+ig_config = "config/channels-3.toml"
+log_dir = "logs"
+allow_lan = false
+allow_sim_lan = false
+
+# Laptop / one-PC: one IG process reports every channel.
+[[targets]]
+name = "ig"
+channel = "all"
+control = "127.0.0.1:2376"

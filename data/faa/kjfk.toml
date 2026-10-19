@@ -1,0 +1,138 @@
+# Authoritative FAA transcription used by src/faa.cpp (faa_kjfk).
+# Do not invent coordinates. Cycle dates travel with every value.
+
+icao = "KJFK"
+name = "John F Kennedy International"
+arp_lat_dms = "40-38-23.741N"
+arp_lon_dms = "73-46-43.292W"
+elev_ft = 13
+source = "FAA AIP AD 2 KJFK (faa.gov) + NFDC, cross-checked OurAirports"
+effective = "2026-10-01"
+retrieved = "2026-10-18"
+
+[[ends]]
+ident = "04L"
+lat_dms = "40-37-19.2754N"
+lon_dms = "73-47-08.1029W"
+elev_ft = 11.9
+true_brg_deg = 30.7583
+length_ft = 12079
+width_ft = 200
+displaced_ft = 460
+als = "NONE"
+papi = "P4L"
+papi_deg = 3.00
+vgsi_tch_ft = 75
+tdz = true
+
+[[ends]]
+ident = "22R"
+lat_dms = "40-39-01.8338N"
+lon_dms = "73-45-47.9596W"
+elev_ft = 12.5
+true_brg_deg = 210.7728
+length_ft = 12079
+width_ft = 200
+displaced_ft = 3424
+als = "NONE"
+papi = "P4L"
+papi_deg = 3.00
+vgsi_tch_ft = 77
+
+[[ends]]
+ident = "04R"
+lat_dms = "40-37-31.5418N"
+lon_dms = "73-46-13.2441W"
+elev_ft = 11.9
+true_brg_deg = 30.7680
+length_ft = 8400
+width_ft = 200
+displaced_ft = 0
+als = "ALSF-2"
+papi = "P4L"
+papi_deg = 3.00
+vgsi_tch_ft = 69
+ils_tch_ft = 53
+tdz = true
+emas = true
+emas_len_ft = 393
+emas_wid_ft = 226
+
+[[ends]]
+ident = "22L"
+lat_dms = "40-38-42.8531N"
+lon_dms = "73-45-17.5027W"
+elev_ft = 11.9
+true_brg_deg = 210.7781
+length_ft = 8400
+width_ft = 200
+displaced_ft = 0
+als = "ALSF-2"
+papi = "P4L"
+papi_deg = 3.00
+vgsi_tch_ft = 66
+tdz = true
+emas = true
+emas_len_ft = 405
+emas_wid_ft = 226
+
+[[ends]]
+ident = "13L"
+lat_dms = "40-39-27.952N"
+lon_dms = "73-47-24.8606W"
+elev_ft = 12.9
+true_brg_deg = 120.7546
+length_ft = 10000
+width_ft = 200
+displaced_ft = 907
+als = "ALSF-2"
+papi = "P4L"
+papi_deg = 3.00
+vgsi_tch_ft = 74
+ils_tch_ft = 58
+rlls_lead_in = true
+tdz = true
+
+[[ends]]
+ident = "31R"
+lat_dms = "40-38-37.4085N"
+lon_dms = "73-45-33.3818W"
+elev_ft = 12.6
+true_brg_deg = 300.7748
+length_ft = 10000
+width_ft = 200
+displaced_ft = 1027
+als = "MALSR"
+papi = "P4R"
+papi_deg = 3.00
+vgsi_tch_ft = 54
+tdz = true
+
+[[ends]]
+ident = "13R"
+lat_dms = "40-38-54.1008N"
+lon_dms = "73-49-00.173W"
+elev_ft = 12.5
+true_brg_deg = 120.7382
+length_ft = 14511
+width_ft = 200
+displaced_ft = 2044
+als = "RLLS"
+papi = "P4L+P4L"
+papi_deg = 3.00
+vgsi_tch_ft = 79
+rlls_lead_in = true
+
+[[ends]]
+ident = "31L"
+lat_dms = "40-37-40.7799N"
+lon_dms = "73-46-18.4107W"
+elev_ft = 12.6
+true_brg_deg = 300.7674
+length_ft = 14511
+width_ft = 200
+displaced_ft = 3264
+als = "NONE"
+papi = "P4L"
+papi_deg = 3.00
+vgsi_tch_ft = 74

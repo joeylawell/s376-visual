@@ -1,0 +1,47 @@
+<!-- KSEA map for s376-visual (osgEarth 3.x).
+     Point render.earth_file here after `s376-cache synth-ksea` or `fetch KSEA`
+     plus `s376-cache geojson KSEA` have written cache/ksea/.
+     Paths are relative to the process working directory (repo root).
+     If this file fails to load, the IG falls back to the procedural globe
+     plus a local DEM drape — no RSI / CAE tiles.
+     Stay off streamed OSM raster tiles (tile usage policy). Aeroways come
+     from our FeatureCollection (OurAirports + optional Overpass, ODbL).
+     See docs/SOURCES.md. -->
+<map name="ksea" type="geocentric" version="2">
+    <options>
+        <terrain>
+            <min_tile_range_ratio>6</min_tile_range_ratio>
+        </terrain>
+    </options>
+    <image name="ksea-imagery" driver="gdal">
+        <url>cache/ksea/imagery.tif</url>
+        <cache_policy usage="no_cache"/>
+    </image>
+    <elevation name="ksea-dem" driver="gdal">
+        <url>cache/ksea/elev.tif</url>
+        <cache_policy usage="no_cache"/>
+    </elevation>
+    <model name="ksea-aeroway" driver="feature_geom">
+        <features name="osm-aeroway" driver="ogr">
+            <url>cache/ksea/osm.geojson</url>
+        </features>
+        <styles>
+            <style type="text/css">
+                runway {
+                    stroke: #505050;
+                    stroke-width: 40m;
+                    altitude-clamping: terrain;
+                }
+                taxiway {
+                    stroke: #b8b070;
+                    stroke-width: 16m;
+                    altitude-clamping: terrain;
+                }
+                apron {
+                    fill: #7a7060;
+                    altitude-clamping: terrain;
+                }
+            </style>
+        </styles>
+    </model>
+</map>

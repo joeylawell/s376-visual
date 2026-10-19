@@ -1,0 +1,21 @@
+# Fetch / import plan. No imagery in git. --plan only.
+name = "KLAX"
+icao = "KLAX"
+south = 33.277031
+north = 34.607969
+west = -119.210158
+east = -117.605842
+near_m = 0.1
+near_dem_m = 1.0
+mid_m = 0.4
+far_m = 1.6
+near_km = 8.0
+mid_km = 40.0
+approach_nm = 12.0
+radius_km = 74.080
+imagery = "lacounty"
+dem = "3dep"
+policy = "public"
+local_import = false
+source = "LA County 4-inch (~0.10 m). Download then import-raster."
+airports = ["KLAX"]

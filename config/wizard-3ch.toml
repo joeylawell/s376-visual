@@ -1,0 +1,24 @@
+# Three channel processes on one machine (loopback ports).
+# Production hangar PCs would each bind 127.0.0.1:2376 on their own
+# box; record private IPs only in a gitignored local.toml.
+
+visual = "s376-visual"
+ig_config = "config/raster-3.toml"
+log_dir = "logs"
+allow_lan = false
+allow_sim_lan = false
+
+[[targets]]
+name = "front"
+channel = "front"
+control = "127.0.0.1:2376"
+
+[[targets]]
+name = "left"
+channel = "left"
+control = "127.0.0.1:2377"
+
+[[targets]]
+name = "right"
+channel = "right"
+control = "127.0.0.1:2378"

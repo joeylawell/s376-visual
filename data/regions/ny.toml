@@ -1,0 +1,15 @@
+# Shared New York region plan (not a packed cache).
+# High-res (0.5–1 m) stays per airport: cache/KJFK and cache/KEWR
+# (5 km around the ARP + 10 NM finals from both FAA ends).
+# Shared outer layers: ~4 m mid, ~20 m far over this box.
+# Pager loads KEWR tiles only when the eyepoint is near Newark.
+
+name = "NY"
+south = 40.40
+north = 40.98
+west = -74.45
+east = -73.45
+mid_m = 4.0
+far_m = 20.0
+airports = ["KJFK", "KEWR"]
+source = "plan for s376-cache; FAA ARP/ends from data/faa/{kjfk,kewr}.toml"

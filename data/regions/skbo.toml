@@ -1,0 +1,21 @@
+# Fetch / import plan. No imagery in git. --plan only.
+name = "SKBO"
+icao = "SKBO"
+south = 4.036131
+north = 5.367069
+west = -74.814616
+east = -73.479184
+near_m = 0.15
+near_dem_m = 30.0
+mid_m = 0.6
+far_m = 2.4
+near_km = 8.0
+mid_km = 40.0
+approach_nm = 12.0
+radius_km = 74.080
+imagery = "ideca"
+dem = "glo30"
+policy = "public"
+local_import = false
+source = "IDECA Bogotá 2025. Confirm airport coverage, then import-raster."
+airports = ["SKBO"]

@@ -1,0 +1,65 @@
+# KLAX — official FAA Chart Supplement / NASR 2026-10-02 (src/faa.cpp).
+# 06R/24L physical 10885×150 (TORA 10285 is declared, not the ends).
+# ALSF-2 on 24R and 25L only; 24L is MALSR. Official wins.
+# Packet-112 switch numbers are ours, not RSI's.
+
+icao = "KLAX"
+name = "Los Angeles International"
+arp_lat = 33.9425
+arp_lon = -118.4080
+elev_ft = 128
+attribution = "FAA Chart Supplement / NFDC NASR 2026-10-02, cross-checked OurAirports"
+
+[lights]
+edge_switch = 1
+centerline_switch = 2
+approach_switch = 3
+threshold_switch = 4
+
+[[runways]]
+ident_le = "06L"
+ident_he = "24R"
+le_lat = 33.95020
+le_lon = -118.43190
+le_elev_ft = 117
+heading_deg = 68.9
+length_ft = 8926
+width_ft = 150
+approach_le = "MALSR"
+approach_he = "ALSF-2"
+
+[[runways]]
+ident_le = "06R"
+ident_he = "24L"
+le_lat = 33.94700
+le_lon = -118.43140
+le_elev_ft = 115
+heading_deg = 68.9
+length_ft = 10885
+width_ft = 150
+approach_le = "MALSR"
+approach_he = "MALSR"
+
+[[runways]]
+ident_le = "07L"
+ident_he = "25R"
+le_lat = 33.93620
+le_lon = -118.41990
+le_elev_ft = 115
+heading_deg = 68.9
+length_ft = 12923
+width_ft = 150
+approach_le = "MALSR"
+approach_he = "MALSR"
+
+[[runways]]
+ident_le = "07R"
+ident_he = "25L"
+le_lat = 33.93350
+le_lon = -118.41870
+le_elev_ft = 102
+heading_deg = 68.9
+length_ft = 11095
+width_ft = 200
+approach_le = "MALSR"
+approach_he = "ALSF-2"
